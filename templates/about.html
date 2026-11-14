@@ -1,72 +1,72 @@
 {% extends "base.html" %}
 
-{% block title %}About & Academic Architecture — DashClarity AI{% endblock %}
+{% block title %}Architecture & Research — DashClarity AI{% endblock %}
 
 {% block content %}
-<div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+<div class="app-container-sm page-wrapper">
     <!-- Header -->
-    <div class="mb-12 border-b border-slate-800 pb-8">
-        <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-cyan-950/80 border border-cyan-800/80 text-cyan-400 text-xs font-mono font-medium mb-4">
+    <div class="mb-10 pb-6 border-b border-white/[0.08]">
+        <div class="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-cyan-950/80 border border-cyan-800/60 text-cyan-400 text-xs font-mono font-medium mb-3">
             <span>Academic End-Semester Deliverable</span>
         </div>
-        <h1 class="text-4xl font-extrabold text-white tracking-tight">System Architecture & Research Context</h1>
-        <p class="text-slate-400 text-sm mt-3 leading-relaxed">
+        <h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-white">System Architecture & Research Context</h1>
+        <p class="text-xs sm:text-sm text-slate-400 mt-1 leading-relaxed">
             Technical documentation for <strong>DashClarity AI</strong> — An AI-powered dashcam footage enhancement platform utilizing Spatial-Temporal Consistent Decomposition (STCD).
         </p>
     </div>
 
     <!-- Section 1: Problem Statement -->
-    <section class="mb-12">
-        <h2 class="text-xl font-bold text-white mb-4 flex items-center space-x-2">
-            <span class="w-2 h-6 bg-cyan-400 rounded-full inline-block"></span>
+    <section class="mb-10">
+        <h2 class="text-base font-bold text-white mb-3 flex items-center gap-2">
+            <span class="w-1.5 h-4 bg-cyan-400 rounded-full inline-block"></span>
             <span>1. Problem Statement & Motivation</span>
         </h2>
-        <div class="glass-card p-6 rounded-2xl text-slate-300 text-sm leading-relaxed space-y-3">
+        <div class="card-panel p-5 text-slate-300 text-xs sm:text-sm leading-relaxed space-y-3">
             <p>
-                Dashcam video surveillance is critical for traffic accident reconstruction, hit-and-run liability attribution, and automotive insurance claims verification. However, night-time dashcam footage frequently suffers from:
+                Dashcam video recordings represent primary digital evidence in traffic collision reconstruction, hit-and-run liability attribution, and automotive insurance claim adjudication. However, nocturnal recordings are fundamentally degraded by:
             </p>
-            <ul class="list-disc list-inside space-y-1 text-slate-400 pl-2">
-                <li><strong class="text-slate-200">Extreme Low Illumination:</strong> Unlit rural roads and poorly lit urban intersections provide insufficient photons to CMOS image sensors.</li>
-                <li><strong class="text-slate-200">Heavy Sensor Noise & Artifacts:</strong> High ISO sensor gains introduce non-Gaussian chromatic grain and motion blur.</li>
-                <li><strong class="text-slate-200">Temporal Inconsistency & Flickering:</strong> Applying naive single-frame image enhancement models (such as RetinexNet or standard GANs) independently to each video frame produces intolerable visual flicker and unstable brightness fluctuations across consecutive frames.</li>
+            <ul class="list-disc list-inside space-y-1 text-slate-400 pl-1 text-xs">
+                <li><strong class="text-slate-200">Extreme Low Illumination:</strong> Unlit rural roads and poorly illuminated intersections provide insufficient photons to CMOS image sensors.</li>
+                <li><strong class="text-slate-200">High Sensor Noise & Gain Grain:</strong> Extreme ISO amplification introduces non-Gaussian noise that obscures license plates and hazard contours.</li>
+                <li><strong class="text-slate-200">Inter-Frame Temporal Flickering:</strong> Conventional single-frame enhancement models (such as RetinexNet or frame-by-frame GANs) induce intolerable visual flashing across consecutive frames.</li>
             </ul>
         </div>
     </section>
 
     <!-- Section 2: Mathematical Formulation of STCD -->
-    <section class="mb-12">
-        <h2 class="text-xl font-bold text-white mb-4 flex items-center space-x-2">
-            <span class="w-2 h-6 bg-indigo-400 rounded-full inline-block"></span>
+    <section class="mb-10">
+        <h2 class="text-base font-bold text-white mb-3 flex items-center gap-2">
+            <span class="w-1.5 h-4 bg-indigo-400 rounded-full inline-block"></span>
             <span>2. Mathematical Formulation & Retinex Theory</span>
         </h2>
-        <div class="glass-card p-6 rounded-2xl text-slate-300 text-sm leading-relaxed space-y-4">
+        <div class="card-panel p-5 text-slate-300 text-xs sm:text-sm leading-relaxed space-y-3">
             <p>
                 DashClarity AI incorporates the <strong>Spatial-Temporal Consistent Decomposition (STCD)</strong> framework presented at IJCAI 2025. According to classical Retinex Theory, a low-light frame \(I\) can be decomposed into reflectance \(R\) and illumination \(L\):
             </p>
-            <div class="p-4 rounded-xl bg-slate-950 font-mono text-cyan-300 text-center text-base border border-slate-800">
+            <div class="p-3 rounded-lg bg-[#080b12] font-mono text-cyan-300 text-center text-sm border border-white/[0.06]">
                 \(I(x, y, t) = R(x, y, t) \odot L(x, y, t)\)
             </div>
-            <p>
-                In video sequences, \(R\) represents the <em>view-independent intrinsic appearance</em> of the physical objects (vehicles, road surface, traffic signs), while \(L\) describes the <em>view-dependent dynamic shading and lighting</em> (headlights, streetlamps).
+            <p class="text-xs text-slate-400">
+                In video sequences, \(R\) represents the <em>view-independent intrinsic appearance</em> of physical objects (vehicles, asphalt, road signs), while \(L\) describes the <em>view-dependent dynamic shading and lighting</em> (headlights, streetlamps).
             </p>
-            <p>
+            <p class="text-xs text-slate-400">
                 STCD enforces two complementary temporal constraints:
             </p>
-            <ol class="list-decimal list-inside space-y-2 text-slate-400 pl-2">
-                <li><strong class="text-slate-200">Cross-Frame Intrinsic Correspondence:</strong> Leverages dynamic correspondence between frame \(I_t\) and neighbor \(I_{t+1}\) to align the reflectance component \(R\), ensuring object colors and edges remain constant over time.</li>
-                <li><strong class="text-slate-200">Scene-Level Illumination Smoothness:</strong> Enforces smooth spatio-temporal continuity on the illumination map \(L\), completely preventing artificial high-frequency brightness oscillations between frames.</li>
+            <ol class="list-decimal list-inside space-y-1.5 text-slate-400 pl-1 text-xs">
+                <li><strong class="text-slate-200">Cross-Frame Correspondence:</strong> Leverages dynamic correspondence between adjacent frames \(I_t\) and \(I_{t+1}\) to align reflectance \(R\), ensuring object colors and edges remain constant over time.</li>
+                <li><strong class="text-slate-200">Scene-Level Illumination Smoothness:</strong> Enforces smooth spatio-temporal continuity on the illumination map \(L\), suppressing artificial high-frequency brightness oscillations between frames.</li>
             </ol>
         </div>
     </section>
 
     <!-- Section 3: System Architecture Diagram -->
-    <section class="mb-12">
-        <h2 class="text-xl font-bold text-white mb-4 flex items-center space-x-2">
-            <span class="w-2 h-6 bg-cyan-400 rounded-full inline-block"></span>
+    <section class="mb-10">
+        <h2 class="text-base font-bold text-white mb-3 flex items-center gap-2">
+            <span class="w-1.5 h-4 bg-cyan-400 rounded-full inline-block"></span>
             <span>3. End-to-End System Architecture</span>
         </h2>
-        <div class="glass-card p-6 rounded-2xl">
-            <div class="p-6 rounded-xl bg-slate-950 border border-slate-800 font-mono text-xs text-slate-300 overflow-x-auto leading-relaxed">
+        <div class="card-panel p-5">
+            <div class="p-4 rounded-lg bg-[#080b12] border border-white/[0.06] font-mono text-[11px] text-slate-300 overflow-x-auto leading-relaxed">
 <pre>
 ┌────────────────────────────────────────────────────────────────────────┐
 │                        DASHCLARITY AI PLATFORM                         │
@@ -78,7 +78,7 @@
 │                          FLASK WEB BACKEND                             │
 │  - Secure File Sanitation & Job UUID Creation                          │
 │  - Container Validation (FFmpeg Stream Probe)                          │
-│  - Audio Track Extraction (Lossless AAC/M4A)                           │
+│  - Audio Track Extraction (Lossless AAC Buffer)                        │
 └──────────────────────────────────┬─────────────────────────────────────┘
                                    │
                       [2. Video Stream Extraction]
@@ -126,36 +126,36 @@
     </section>
 
     <!-- Section 4: Hardware & Benchmark Results -->
-    <section class="mb-12">
-        <h2 class="text-xl font-bold text-white mb-4 flex items-center space-x-2">
-            <span class="w-2 h-6 bg-emerald-400 rounded-full inline-block"></span>
+    <section class="mb-10">
+        <h2 class="text-base font-bold text-white mb-3 flex items-center gap-2">
+            <span class="w-1.5 h-4 bg-emerald-400 rounded-full inline-block"></span>
             <span>4. Local GPU Hardware Verification</span>
         </h2>
-        <div class="glass-card p-6 rounded-2xl">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs font-mono">
-                <div class="space-y-3">
-                    <h3 class="text-sm font-bold text-white font-sans">Execution Hardware</h3>
-                    <div class="p-3 bg-slate-950 rounded-lg border border-slate-800">
-                        <span class="text-slate-400">GPU:</span> <span class="text-cyan-400 font-bold">NVIDIA GeForce RTX 4060 Laptop GPU</span>
+        <div class="card-panel p-5">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
+                <div class="space-y-2">
+                    <h3 class="text-xs font-bold text-white font-sans uppercase text-slate-400">Execution Hardware</h3>
+                    <div class="p-2.5 bg-[#080b12] rounded-md border border-white/[0.06]">
+                        <span class="text-slate-500">GPU:</span> <span class="text-cyan-400 font-bold">NVIDIA GeForce RTX 4060 Laptop GPU</span>
                     </div>
-                    <div class="p-3 bg-slate-950 rounded-lg border border-slate-800">
-                        <span class="text-slate-400">VRAM Capacity:</span> <span class="text-white font-bold">8,188 MiB Dedicated</span>
+                    <div class="p-2.5 bg-[#080b12] rounded-md border border-white/[0.06]">
+                        <span class="text-slate-500">VRAM:</span> <span class="text-white font-bold">8,188 MiB Dedicated GDDR6</span>
                     </div>
-                    <div class="p-3 bg-slate-950 rounded-lg border border-slate-800">
-                        <span class="text-slate-400">CUDA & PyTorch:</span> <span class="text-white font-bold">CUDA 12.1 &bull; PyTorch 2.5.1</span>
+                    <div class="p-2.5 bg-[#080b12] rounded-md border border-white/[0.06]">
+                        <span class="text-slate-500">CUDA / PyTorch:</span> <span class="text-white font-bold">CUDA 12.1 &bull; PyTorch 2.5.1</span>
                     </div>
                 </div>
 
-                <div class="space-y-3">
-                    <h3 class="text-sm font-bold text-white font-sans">Empirical Benchmarks</h3>
-                    <div class="p-3 bg-slate-950 rounded-lg border border-slate-800">
-                        <span class="text-slate-400">720p (1280x720) Throughput:</span> <span class="text-emerald-400 font-bold">4.48 FPS</span>
+                <div class="space-y-2">
+                    <h3 class="text-xs font-bold text-white font-sans uppercase text-slate-400">Empirical Benchmarks</h3>
+                    <div class="p-2.5 bg-[#080b12] rounded-md border border-white/[0.06]">
+                        <span class="text-slate-500">720p (1280x720) Throughput:</span> <span class="text-emerald-400 font-bold">4.48 FPS</span>
                     </div>
-                    <div class="p-3 bg-slate-950 rounded-lg border border-slate-800">
-                        <span class="text-slate-400">360p (640x360) Throughput:</span> <span class="text-emerald-400 font-bold">7.49 FPS</span>
+                    <div class="p-2.5 bg-[#080b12] rounded-md border border-white/[0.06]">
+                        <span class="text-slate-500">360p (640x360) Throughput:</span> <span class="text-emerald-400 font-bold">7.49 FPS</span>
                     </div>
-                    <div class="p-3 bg-slate-950 rounded-lg border border-slate-800">
-                        <span class="text-slate-400">Peak VRAM Allocation:</span> <span class="text-cyan-400 font-bold">1,489.07 MB (~18% of GPU capacity)</span>
+                    <div class="p-2.5 bg-[#080b12] rounded-md border border-white/[0.06]">
+                        <span class="text-slate-500">Peak VRAM Allocated:</span> <span class="text-cyan-400 font-bold">1,489.07 MB (~18% of GPU capacity)</span>
                     </div>
                 </div>
             </div>
@@ -163,20 +163,20 @@
     </section>
 
     <!-- Section 5: Real-World Use Cases -->
-    <section class="mb-12">
-        <h2 class="text-xl font-bold text-white mb-4 flex items-center space-x-2">
-            <span class="w-2 h-6 bg-cyan-400 rounded-full inline-block"></span>
+    <section class="mb-10">
+        <h2 class="text-base font-bold text-white mb-3 flex items-center gap-2">
+            <span class="w-1.5 h-4 bg-cyan-400 rounded-full inline-block"></span>
             <span>5. Real-World Applications</span>
         </h2>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
-            <div class="glass-card p-6 rounded-2xl">
-                <h3 class="font-bold text-white mb-2">Automotive Insurance Claims</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs sm:text-sm">
+            <div class="card-panel p-5">
+                <h3 class="font-bold text-white mb-1.5 text-xs sm:text-sm">Automotive Insurance Claims</h3>
                 <p class="text-slate-400 text-xs leading-relaxed">
                     Provides claims adjusters with clear visualization of intersection dynamics, lane positions, and traffic signals during night collisions that would otherwise be rejected as inconclusive.
                 </p>
             </div>
-            <div class="glass-card p-6 rounded-2xl">
-                <h3 class="font-bold text-white mb-2">Fleet Safety & Incident Investigation</h3>
+            <div class="card-panel p-5">
+                <h3 class="font-bold text-white mb-1.5 text-xs sm:text-sm">Fleet Safety & Incident Investigation</h3>
                 <p class="text-slate-400 text-xs leading-relaxed">
                     Fleet management teams can audit driver behavior, near-miss events, and roadway hazards occurring during late-night haulage shifts.
                 </p>
@@ -185,16 +185,16 @@
     </section>
 
     <!-- Section 6: Limitations & Academic Citations -->
-    <section class="mb-12">
-        <h2 class="text-xl font-bold text-white mb-4 flex items-center space-x-2">
-            <span class="w-2 h-6 bg-slate-400 rounded-full inline-block"></span>
+    <section class="mb-10">
+        <h2 class="text-base font-bold text-white mb-3 flex items-center gap-2">
+            <span class="w-1.5 h-4 bg-slate-400 rounded-full inline-block"></span>
             <span>6. Limitations & Academic References</span>
         </h2>
-        <div class="glass-card p-6 rounded-2xl text-xs text-slate-400 space-y-4 font-mono leading-relaxed">
+        <div class="card-panel p-5 text-xs text-slate-400 space-y-3 font-mono leading-relaxed">
             <p>
                 <strong>Model Limitations:</strong> STCD enhances visibility and suppresses temporal flicker, but cannot hallucinate sub-pixel details (e.g. completely blurred license plates at distance) that were physically absent from the CMOS sensor's captured photons. Severe lens glare from high-beam headlights may create localized haloing.
             </p>
-            <div class="pt-4 border-t border-slate-800 space-y-2">
+            <div class="pt-3 border-t border-white/[0.06] space-y-1.5">
                 <p class="text-slate-300 font-bold font-sans">Key Citations:</p>
                 <p>
                     [1] Xu, X., Zhou, K., Hu, T., Wu, J., Wang, R., Peng, H., & Yu, B. (2025). <em>Low-Light Video Enhancement via Spatial-Temporal Consistent Decomposition</em>. In Proceedings of the International Joint Conference on Artificial Intelligence (IJCAI 2025).

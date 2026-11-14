@@ -420,13 +420,13 @@ function switchViewMode(mode) {
     if (mode === "side") {
         sideCont.classList.remove("hidden");
         splitCont.classList.add("hidden");
-        sideBtn.className = "px-3 py-1.5 rounded-md bg-slate-800 text-cyan-400 font-semibold transition-all";
-        splitBtn.className = "px-3 py-1.5 rounded-md text-slate-400 hover:text-white transition-all";
+        sideBtn.classList.add("active");
+        splitBtn.classList.remove("active");
     } else {
         sideCont.classList.add("hidden");
         splitCont.classList.remove("hidden");
-        splitBtn.className = "px-3 py-1.5 rounded-md bg-slate-800 text-cyan-400 font-semibold transition-all";
-        sideBtn.className = "px-3 py-1.5 rounded-md text-slate-400 hover:text-white transition-all";
+        splitBtn.classList.add("active");
+        sideBtn.classList.remove("active");
     }
 }
 
@@ -443,6 +443,14 @@ function fetchMetrics(jobId) {
             const ill = m.illumination_analysis || {};
             const tech = m.technical_summary || {};
             const gt = m.ground_truth_reference || {};
+
+            // Populate video header badges
+            const origResEl = document.getElementById("label-orig-res");
+            if (origResEl && tech.original_resolution) origResEl.innerText = tech.original_resolution;
+            const origFpsEl = document.getElementById("label-orig-fps");
+            if (origFpsEl && tech.original_fps) origFpsEl.innerText = `${tech.original_fps} FPS`;
+            const enhResEl = document.getElementById("label-enh-res");
+            if (enhResEl && tech.enhanced_resolution) enhResEl.innerText = tech.enhanced_resolution;
 
             // Populate illumination stats
             document.getElementById("metric-lum-gain").innerText = `+${ill.illumination_gain_percent || 0}%`;
@@ -476,3 +484,4 @@ function formatBytes(bytes) {
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
+

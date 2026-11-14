@@ -98,3 +98,4 @@ class VideoLoader:
     def close(self):
         if self.cap and self.cap.isOpened():
             self.cap.release()
+

@@ -124,3 +124,4 @@ def check_audio_stream(video_path: str) -> bool:
     except Exception as e:
         logger.warning(f"Audio probe check non-fatal exception: {e}")
         return False
+

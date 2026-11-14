@@ -277,3 +277,4 @@ def stream_enhanced_video(job_id):
 if __name__ == "__main__":
     logger.info(f"Starting DashClarity AI on http://{HOST}:{PORT}")
     app.run(host=HOST, port=PORT, debug=False)
+

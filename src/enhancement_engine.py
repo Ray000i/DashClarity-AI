@@ -169,3 +169,4 @@ class STCDEnhancer:
         gaussian = cv2.GaussianBlur(upscaled, (0, 0), sigmaX=1.5)
         sharpened = cv2.addWeighted(upscaled, 1.25, gaussian, -0.25, 0)
         return sharpened
+

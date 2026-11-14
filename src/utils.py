@@ -52,3 +52,4 @@ def is_allowed_file(filename: str, allowed_extensions: set) -> bool:
         return False
     ext = filename.rsplit(".", 1)[1].lower()
     return ext in allowed_extensions
+

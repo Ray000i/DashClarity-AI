@@ -50,3 +50,4 @@ SECRET_KEY = os.environ.get("SECRET_KEY", "dashclarity-ai-academic-secret-key-20
 DEBUG = False
 PORT = 5000
 HOST = "127.0.0.1"
+

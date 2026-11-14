@@ -1,0 +1,235 @@
+{% extends "base.html" %}
+
+{% block title %}Results & Comparison — DashClarity AI{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    <!-- Top Action Banner -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between pb-8 mb-8 border-b border-slate-800 gap-4">
+        <div>
+            <div class="flex items-center space-x-3">
+                <span class="text-xs font-mono font-semibold px-2.5 py-1 rounded-md bg-emerald-950 text-emerald-400 border border-emerald-800/80">ENHANCEMENT COMPLETE</span>
+                <span class="text-xs font-mono text-slate-400">JOB ID: {{ job_id }}</span>
+            </div>
+            <h1 class="text-3xl font-extrabold text-white tracking-tight mt-2">Footage Forensic Comparison</h1>
+        </div>
+
+        <div class="flex items-center space-x-3">
+            <a href="{{ url_for('upload_page') }}" class="btn-secondary text-xs">
+                Process Another Video
+            </a>
+            <a href="{{ url_for('api_download_video', job_id=job_id) }}" class="btn-primary text-xs">
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                </svg>
+                Download Enhanced MP4
+            </a>
+        </div>
+    </div>
+
+    <!-- Comparison View Modes Toggle -->
+    <div class="flex items-center justify-between mb-6">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-300 font-mono">Visual Inspection</h2>
+        <div class="inline-flex rounded-lg bg-slate-900 p-1 border border-slate-800 text-xs font-mono">
+            <button id="view-mode-side" onclick="switchViewMode('side')" class="px-3 py-1.5 rounded-md bg-slate-800 text-cyan-400 font-semibold transition-all">Side-by-Side Synced</button>
+            <button id="view-mode-split" onclick="switchViewMode('split')" class="px-3 py-1.5 rounded-md text-slate-400 hover:text-white transition-all">Interactive Split Slider</button>
+        </div>
+    </div>
+
+    <!-- Mode 1: Synchronized Dual Video Player -->
+    <div id="container-side-by-side" class="space-y-4 mb-12">
+        <div class="video-comparison-grid">
+            <!-- Original Player -->
+            <div class="video-player-card">
+                <div class="video-badge">
+                    <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+                    <span>RAW DASHCAM FOOTAGE</span>
+                </div>
+                <video id="player-original" playsinline preload="metadata">
+                    <source src="{{ url_for('stream_original_video', job_id=job_id) }}" type="video/mp4">
+                    Your browser does not support HTML5 video.
+                </video>
+            </div>
+
+            <!-- Enhanced Player -->
+            <div class="video-player-card">
+                <div class="video-badge">
+                    <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+                    <span class="text-cyan-300">STCD AI ENHANCED</span>
+                </div>
+                <video id="player-enhanced" playsinline preload="metadata">
+                    <source src="{{ url_for('stream_enhanced_video', job_id=job_id) }}" type="video/mp4">
+                    Your browser does not support HTML5 video.
+                </video>
+            </div>
+        </div>
+
+        <!-- Master Synchronized Video Controls -->
+        <div class="glass-card p-4 rounded-xl border border-slate-800 flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center space-x-3">
+                <button id="btn-sync-play" onclick="toggleSyncPlay()" class="btn-primary text-xs px-4 py-2">
+                    <svg id="icon-play" class="w-4 h-4 mr-1.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"></path>
+                    </svg>
+                    <span id="label-play">Play Both</span>
+                </button>
+                <button onclick="restartSyncVideos()" class="btn-secondary text-xs px-3 py-2" title="Restart from beginning">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Scrub Bar -->
+            <div class="flex-grow flex items-center space-x-3 max-w-xl">
+                <span id="time-current" class="text-xs font-mono text-slate-400">00:00</span>
+                <input type="range" id="sync-scrub" min="0" max="100" value="0" step="0.1" class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-400">
+                <span id="time-duration" class="text-xs font-mono text-slate-400">00:00</span>
+            </div>
+
+            <!-- Playback Speed -->
+            <div class="flex items-center space-x-2">
+                <span class="text-xs text-slate-400 font-mono">Speed:</span>
+                <select id="sync-speed" onchange="changeSyncSpeed(this.value)" class="bg-slate-900 border border-slate-800 text-xs font-mono text-slate-300 rounded px-2 py-1 outline-none">
+                    <option value="0.25">0.25x (Slow-Mo)</option>
+                    <option value="0.5">0.5x</option>
+                    <option value="1.0" selected>1.0x (Normal)</option>
+                    <option value="1.5">1.5x</option>
+                    <option value="2.0">2.0x</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mode 2: Interactive Split Slider (Initially Hidden) -->
+    <div id="container-split-slider" class="hidden mb-12">
+        <div class="split-slider-container" id="split-slider-box">
+            <!-- Bottom Layer: Enhanced Video -->
+            <video id="split-enhanced-video" playsinline loop muted autoplay>
+                <source src="{{ url_for('stream_enhanced_video', job_id=job_id) }}" type="video/mp4">
+            </video>
+            <div class="video-badge" style="top: 1rem; right: 1rem; left: auto;">
+                <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+                <span>ENHANCED</span>
+            </div>
+
+            <!-- Top Layer: Original Video (Clipped) -->
+            <div class="split-slider-overlay" id="split-slider-clip">
+                <video id="split-original-video" playsinline loop muted autoplay>
+                    <source src="{{ url_for('stream_original_video', job_id=job_id) }}" type="video/mp4">
+                </video>
+                <div class="video-badge" style="top: 1rem; left: 1rem;">
+                    <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+                    <span>ORIGINAL</span>
+                </div>
+            </div>
+
+            <!-- Draggable Divider Handle -->
+            <div class="split-slider-handle" id="split-slider-handle">
+                <svg class="w-4 h-4 text-slate-900" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 3a1 1 0 01.707.293l3 3a1 1 0 01-1.414 1.414L11 6.414V13.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 111.414-1.414L9 13.586V6.414L7.707 7.707a1 1 0 01-1.414-1.414l3-3A1 1 0 0110 3z" clip-rule="evenodd"></path>
+                </svg>
+            </div>
+        </div>
+        <p class="text-xs text-center text-slate-400 font-mono mt-3">Drag handle left/right to reveal underlying enhancement details</p>
+    </div>
+
+    <!-- Technical Quality Metrics Section -->
+    <div class="mb-12">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-300 mb-6 font-mono">Forensic & Technical Quality Metrics</h2>
+        
+        <div id="metrics-loading" class="text-xs font-mono text-slate-400">Fetching technical statistics...</div>
+        
+        <div id="metrics-grid" class="hidden space-y-6">
+            <!-- Row 1: Illumination & Stability Metrics -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="metric-tile">
+                    <div class="label">Illumination Gain</div>
+                    <div id="metric-lum-gain" class="value text-cyan-400">+0.0%</div>
+                    <div class="subtext">Shadow & low-light amplification</div>
+                </div>
+                <div class="metric-tile">
+                    <div class="label">Contrast Improvement</div>
+                    <div id="metric-contrast-idx" class="value text-emerald-400">0.0x</div>
+                    <div class="subtext">Root-mean-square dynamic contrast</div>
+                </div>
+                <div class="metric-tile">
+                    <div class="label">Temporal Stability</div>
+                    <div id="metric-temporal-score" class="value text-indigo-400">0.0 / 100</div>
+                    <div class="subtext">Inter-frame gradient flicker suppression</div>
+                </div>
+                <div class="metric-tile">
+                    <div class="label">Processing Throughput</div>
+                    <div id="metric-infer-fps" class="value text-white">0.0 FPS</div>
+                    <div class="subtext">Inference rate on NVIDIA RTX 4060</div>
+                </div>
+            </div>
+
+            <!-- Row 2: Resolution, FPS, and File Container -->
+            <div class="glass-card p-6 rounded-2xl border border-slate-800">
+                <h3 class="text-xs font-mono uppercase text-slate-400 mb-4 font-semibold">Video Container Specifications</h3>
+                <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 text-xs font-mono">
+                    <div>
+                        <span class="text-slate-400 block">Original Resolution</span>
+                        <span id="metric-orig-res" class="text-white font-bold text-sm">-</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block">Enhanced Resolution</span>
+                        <span id="metric-enh-res" class="text-cyan-400 font-bold text-sm">-</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block">Original FPS</span>
+                        <span id="metric-orig-fps" class="text-white font-bold text-sm">-</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block">Processing Wall Time</span>
+                        <span id="metric-proc-time" class="text-white font-bold text-sm">-</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block">Original File Size</span>
+                        <span id="metric-orig-size" class="text-white font-bold text-sm">-</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block">Enhanced File Size</span>
+                        <span id="metric-enh-size" class="text-white font-bold text-sm">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Ground Truth Note Card (Honest Scientific Standards) -->
+            <div class="p-4 rounded-xl bg-slate-900/60 border border-slate-800 text-xs font-mono text-slate-400 flex items-start space-x-3">
+                <svg class="w-5 h-5 text-cyan-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <div>
+                    <span class="text-slate-200 font-bold">Scientific Integrity Note:</span>
+                    <span id="metric-ground-truth-note">
+                        PSNR and SSIM are only reported when paired high-exposure ground truth footage exists. For real-world arbitrary dashcam footage, no-reference luminance gain and temporal gradient stability metrics are evaluated without fabricated data.
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Forensic Legal & Insurance Notice -->
+    <div class="p-6 rounded-2xl bg-amber-950/20 border border-amber-800/40 text-amber-200/90 text-xs leading-relaxed">
+        <h4 class="font-bold text-amber-300 uppercase tracking-wider mb-2 font-mono flex items-center space-x-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+            </svg>
+            <span>Legal Disclaimer for Incident Review and Insurance Adjustment</span>
+        </h4>
+        <p>
+            DashClarity AI applies deep neural illumination estimation and spatial-temporal decomposition to enhance visual visibility in dark recordings. The enhanced video output is an AI-generated restoration and must not be treated as independent legal proof of details, license plate characters, or objects that were not physically captured in the original recording bitstream. Both the raw source footage and the enhanced output should always be preserved together in claims dossiers.
+        </p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        initResultsPage("{{ job_id }}");
+    });
+</script>
+{% endblock %}

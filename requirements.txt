@@ -1,0 +1,24 @@
+# DashClarity AI - Core Dependencies
+# Compatible with Windows 11, NVIDIA RTX 40-Series (Ada Lovelace), Python 3.10+
+
+# Deep Learning Framework (Install via PyTorch index: --index-url https://download.pytorch.org/whl/cu121)
+torch>=2.5.0
+torchvision>=0.20.0
+
+# Computer Vision & Video Processing
+opencv-python>=4.8.0
+imageio>=2.34.0
+imageio-ffmpeg>=0.5.1
+scikit-image>=0.24.0
+Pillow>=10.0.0
+numpy>=1.24.0
+
+# Neural Architecture & Utilities
+einops>=0.7.0
+scipy>=1.11.0
+tqdm>=4.66.0
+PyYAML>=6.0.1
+
+# Web Application Framework
+flask>=3.0.0
+Werkzeug>=3.0.0

@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}Processing Video — DashClarity AI{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+    <div class="glass-card p-8 sm:p-10 rounded-3xl border border-slate-800 shadow-2xl relative overflow-hidden">
+        <!-- Background Ambient Glow -->
+        <div class="absolute -top-24 -right-24 w-72 h-72 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+        <!-- Header -->
+        <div class="flex items-center justify-between mb-8">
+            <div>
+                <span class="text-xs font-mono font-semibold px-2.5 py-1 rounded-md bg-cyan-950 text-cyan-400 border border-cyan-800/80">JOB ID: {{ job_id }}</span>
+                <h1 class="text-2xl font-bold text-white tracking-tight mt-3">Enhancing Dashcam Footage</h1>
+            </div>
+            <div id="status-badge" class="px-3 py-1 rounded-full text-xs font-mono font-semibold bg-cyan-950 text-cyan-400 border border-cyan-800/80 flex items-center space-x-1.5">
+                <span class="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
+                <span id="status-text">INITIALIZING</span>
+            </div>
+        </div>
+
+        <!-- Stage description -->
+        <p id="stage-text" class="text-sm text-slate-300 font-mono mb-6 flex items-center space-x-2">
+            <svg class="w-4 h-4 text-cyan-400 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span>Loading STCD pretrained neural weights on GPU...</span>
+        </p>
+
+        <!-- Progress Bar -->
+        <div class="w-full bg-slate-900 rounded-full h-3.5 mb-8 p-0.5 border border-slate-800 overflow-hidden">
+            <div id="progress-bar" class="h-full rounded-full progress-glow-bar" style="width: 2%"></div>
+        </div>
+
+        <!-- Metrics Live Grid -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+            <div class="metric-tile p-4">
+                <div class="label">Progress</div>
+                <div id="metric-percent" class="text-xl font-bold text-cyan-400 font-mono">0.0%</div>
+            </div>
+            <div class="metric-tile p-4">
+                <div class="label">Frames</div>
+                <div id="metric-frames" class="text-xl font-bold text-white font-mono">0 / 0</div>
+            </div>
+            <div class="metric-tile p-4">
+                <div class="label">Speed</div>
+                <div id="metric-fps" class="text-xl font-bold text-white font-mono">0.0 FPS</div>
+            </div>
+            <div class="metric-tile p-4">
+                <div class="label">ETA</div>
+                <div id="metric-eta" class="text-xl font-bold text-white font-mono">--:--</div>
+            </div>
+        </div>
+
+        <!-- Error Card (Hidden unless error occurs) -->
+        <div id="error-box" class="hidden mb-6 p-4 rounded-xl bg-red-950/60 border border-red-800 text-red-200 text-xs font-mono">
+            <strong>Error:</strong> <span id="error-message"></span>
+        </div>
+
+        <!-- Actions -->
+        <div class="flex items-center justify-between pt-4 border-t border-slate-800">
+            <button id="btn-cancel" onclick="cancelProcessing('{{ job_id }}')" class="btn-danger text-xs">
+                Cancel Processing
+            </button>
+            <p class="text-xs text-slate-400 font-mono">
+                Hardware: NVIDIA RTX 4060 &bull; PyTorch 2.5.1
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        startStatusPolling("{{ job_id }}");
+    });
+</script>
+{% endblock %}

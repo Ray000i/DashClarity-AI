@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block title %}Upload Dashcam Footage — DashClarity AI{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    <!-- Header -->
+    <div class="mb-8">
+        <h1 class="text-3xl font-extrabold text-white tracking-tight">Upload Dashcam Video</h1>
+        <p class="text-slate-400 text-sm mt-2">Upload nighttime or low-illumination dashcam recordings (MP4, AVI, MOV) for deep learning restoration.</p>
+    </div>
+
+    <!-- Upload Card -->
+    <div class="glass-card p-6 sm:p-8 rounded-2xl border border-slate-800 mb-8">
+        <!-- Dropzone -->
+        <div id="dropzone" class="dropzone-container p-10 text-center flex flex-col items-center justify-center">
+            <input type="file" id="video-file-input" accept="video/mp4,video/avi,video/quicktime,video/x-matroska,.mp4,.avi,.mov,.mkv" class="hidden">
+            
+            <div class="w-16 h-16 rounded-2xl bg-cyan-950/80 border border-cyan-800/80 flex items-center justify-center text-cyan-400 mb-4 shadow-lg shadow-cyan-950/50">
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                </svg>
+            </div>
+
+            <h3 class="text-lg font-bold text-white mb-1">Drag and drop dashcam video here</h3>
+            <p class="text-xs text-slate-400 mb-4">or click to browse from your device</p>
+            <button type="button" onclick="document.getElementById('video-file-input').click()" class="btn-secondary text-xs px-4 py-2">
+                Browse Video Files
+            </button>
+            <p class="text-[11px] text-slate-400 font-mono mt-4">Supported: MP4, AVI, MOV (Up to 250 MB)</p>
+        </div>
+
+        <!-- Upload Progress Indicator -->
+        <div id="upload-progress-container" class="hidden mt-6">
+            <div class="flex justify-between text-xs text-slate-300 font-mono mb-2">
+                <span id="upload-status-text">Uploading to secure server storage...</span>
+                <span id="upload-percent-text">0%</span>
+            </div>
+            <div class="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
+                <div id="upload-progress-bar" class="h-full bg-cyan-400 transition-all duration-150" style="width: 0%"></div>
+            </div>
+        </div>
+
+        <!-- Video Preview and Metadata Area (Initially Hidden) -->
+        <div id="preview-section" class="hidden mt-8 pt-8 border-t border-slate-800">
+            <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-300 mb-4 font-mono">Uploaded Video Inspection</h3>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Video Preview Player -->
+                <div class="rounded-xl overflow-hidden bg-black border border-slate-800 aspect-video relative flex items-center justify-center">
+                    <video id="client-preview-player" controls class="w-full h-full object-contain"></video>
+                </div>
+
+                <!-- Video Metadata Card -->
+                <div class="space-y-3">
+                    <div class="metric-tile p-4">
+                        <div class="label">Filename</div>
+                        <div id="meta-filename" class="text-sm font-bold text-white truncate">-</div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="metric-tile p-4">
+                            <div class="label">Resolution</div>
+                            <div id="meta-resolution" class="text-sm font-bold text-cyan-400">-</div>
+                        </div>
+                        <div class="metric-tile p-4">
+                            <div class="label">Duration</div>
+                            <div id="meta-duration" class="text-sm font-bold text-white">-</div>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-3 gap-3">
+                        <div class="metric-tile p-3">
+                            <div class="label">FPS</div>
+                            <div id="meta-fps" class="text-xs font-bold text-white font-mono">-</div>
+                        </div>
+                        <div class="metric-tile p-3">
+                            <div class="label">Frames</div>
+                            <div id="meta-frames" class="text-xs font-bold text-white font-mono">-</div>
+                        </div>
+                        <div class="metric-tile p-3">
+                            <div class="label">Size</div>
+                            <div id="meta-size" class="text-xs font-bold text-white font-mono">-</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Enhancement Configuration Options -->
+            <div class="mt-8 p-5 rounded-xl bg-slate-900/60 border border-slate-800">
+                <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-300 mb-4 font-mono">Enhancement Parameters</h4>
+                
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <!-- Frame Limit Toggle -->
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Processing Window</label>
+                        <select id="param-max-frames" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 font-mono focus:border-cyan-500 outline-none">
+                            <option value="90">Quick Demo Window (First 90 Frames ~3-6s)</option>
+                            <option value="300" selected>Standard Demo (First 300 Frames ~10s)</option>
+                            <option value="600">Extended Window (First 600 Frames ~20s)</option>
+                            <option value="0">Entire Video Sequence (All Frames)</option>
+                        </select>
+                        <p class="text-[11px] text-slate-400 mt-1">Recommended for responsive evaluation on laptop GPU.</p>
+                    </div>
+
+                    <!-- Super-Resolution Toggle (Module C) -->
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Resolution Enhancement (Module C)</label>
+                        <div class="flex items-center space-x-3 mt-2">
+                            <input type="checkbox" id="param-super-res" class="w-4 h-4 rounded bg-slate-900 border-slate-700 text-cyan-500 focus:ring-0 cursor-pointer">
+                            <label for="param-super-res" class="text-xs text-slate-300 cursor-pointer font-medium">Enable 2x Super-Resolution (Modular)</label>
+                        </div>
+                        <p class="text-[11px] text-slate-400 mt-1">Applies edge-preserving high-fidelity upscaling to enhanced frames.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Start Button -->
+            <div class="mt-8 flex justify-end">
+                <button id="btn-start-enhance" class="btn-primary px-8 py-3 text-sm">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                    </svg>
+                    <span>Execute STCD AI Enhancement</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Initialize upload page script
+    document.addEventListener("DOMContentLoaded", function() {
+        initUploadPage();
+    });
+</script>
+{% endblock %}

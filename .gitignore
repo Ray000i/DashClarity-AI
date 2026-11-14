@@ -1,0 +1,29 @@
+# Virtual Environments
+.venv/
+env/
+venv/
+ENV/
+
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Runtime and Temporary Directories
+input_videos/*
+!input_videos/.gitkeep
+!input_videos/sample_night_dashcam.mp4
+output_videos/*
+!output_videos/.gitkeep
+logs/*
+!logs/.gitkeep
+
+# OS generated files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Environment variables
+.env

@@ -52,7 +52,6 @@
   
   --accent-amber: #f59e0b;     /* Single deliberate accent: playhead, slider handle, primary action */
   --accent-amber-hover: #d97706;
-  --accent-amber-glow: rgba(245, 158, 11, 0.15);
   
   --state-alert: #ff6b6b;      /* Error & alert (Contrast > 6.1:1) */
   --state-alert-bg: #291414;
@@ -127,31 +126,19 @@ body {
 .brand {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.5rem;
   color: var(--text-primary);
   text-decoration: none;
   font-weight: 600;
   font-size: 1.05rem;
 }
 
-.brand-glyph {
-  width: 22px;
-  height: 22px;
-  background-color: var(--accent-amber);
-  color: #121212;
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  font-size: 0.75rem;
-}
-
 .brand-tag {
   color: var(--text-muted);
   font-weight: 400;
-  font-size: 0.85rem;
-  margin-left: 0.25rem;
+  font-size: 0.82rem;
+  padding-left: 0.4rem;
+  border-left: 1px solid var(--border-rule);
 }
 
 .nav-menu {
@@ -649,18 +636,18 @@ main {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   background-color: var(--accent-amber);
+  border: 2px solid #121212;
   color: #121212;
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 10;
-  box-shadow: 0 0 10px rgba(0, 0, 0, 0.7);
   pointer-events: none;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
 }
 

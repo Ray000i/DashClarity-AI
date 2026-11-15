@@ -1,138 +1,145 @@
 {% extends "base.html" %}
 
-{% block title %}Upload Dashcam Footage — DashClarity AI{% endblock %}
+{% block title %}Upload Clip — DashClarity AI{% endblock %}
 
 {% block content %}
-<div class="app-container-sm page-wrapper">
-    <!-- Header -->
-    <div class="mb-8">
-        <h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-white">Upload Dashcam Video</h1>
-        <p class="text-xs sm:text-sm text-slate-400 mt-1">Upload nighttime or low-illumination recordings (MP4, AVI, MOV) for deep learning restoration.</p>
+<div style="max-width: 980px; margin: 0 auto;">
+    <div style="margin-bottom: 1.5rem;">
+        <h1 style="font-size: 1.35rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.35rem;">
+            Upload dashcam clip
+        </h1>
+        <p style="font-size: 0.86rem; color: var(--text-muted);">
+            Select a raw dashcam recording to inspect and calibrate enhancement stages. Max file size: {{ max_upload_size_mb }} MB.
+        </p>
     </div>
 
-    <!-- Upload Card -->
-    <div class="card-panel p-6 sm:p-8">
-        <!-- Drag & Drop Dropzone -->
-        <div id="dropzone" class="upload-dropzone">
-            <input type="file" id="video-file-input" accept="video/mp4,video/avi,video/quicktime,video/x-matroska,.mp4,.avi,.mov,.mkv" class="hidden">
-            
-            <div class="dropzone-icon-circle">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
-                </svg>
-            </div>
-
-            <h3 class="text-sm font-semibold text-white mb-1">Drag and drop dashcam recording here</h3>
-            <p class="text-xs text-slate-400 mb-4">or click to browse from local filesystem</p>
-            
-            <button type="button" onclick="document.getElementById('video-file-input').click()" class="btn btn-secondary btn-sm">
-                <span>Select Video File</span>
-            </button>
-            
-            <div class="flex items-center gap-4 text-[11px] text-slate-500 font-mono mt-5">
-                <span>Supported: MP4, AVI, MOV, MKV</span>
-                <span>&bull;</span>
-                <span>Max Size: 250 MB</span>
-            </div>
-        </div>
-
-        <!-- Uploading Progress Bar (Initially Hidden) -->
-        <div id="upload-progress-container" class="hidden mt-6">
-            <div class="flex justify-between text-xs text-slate-300 font-mono mb-2">
-                <span id="upload-status-text">Transferring video stream...</span>
-                <span id="upload-percent-text" class="text-cyan-400 font-semibold">0%</span>
-            </div>
-            <div class="w-full h-1.5 rounded-full bg-slate-900 overflow-hidden">
-                <div id="upload-progress-bar" class="h-full bg-cyan-400 transition-all duration-150" style="width: 0%"></div>
-            </div>
-        </div>
-
-        <!-- Video Inspection & Preview Section (Revealed upon upload) -->
-        <div id="preview-section" class="hidden mt-8 pt-8 border-t border-white/[0.08] space-y-6">
-            <div class="flex items-center justify-between">
-                <h3 class="text-xs font-mono uppercase tracking-wider text-slate-300 font-semibold">Video Stream Validation</h3>
-                <span class="text-xs font-mono text-emerald-400 flex items-center gap-1.5">
-                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                    Ready for Enhancement
-                </span>
-            </div>
-
-            <!-- Preview Player + Metadata Grid -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <!-- Video Preview Viewport -->
-                <div class="rounded-lg overflow-hidden bg-black border border-white/[0.08] aspect-video flex items-center justify-center">
-                    <video id="client-preview-player" controls class="w-full h-full object-contain"></video>
-                </div>
-
-                <!-- Video Metadata Spec Grid -->
-                <div class="space-y-2">
-                    <div class="spec-item">
-                        <div class="spec-item-label">Source Filename</div>
-                        <div id="meta-filename" class="spec-item-value text-xs truncate text-white">-</div>
-                    </div>
-                    <div class="grid grid-cols-2 gap-2">
-                        <div class="spec-item">
-                            <div class="spec-item-label">Resolution</div>
-                            <div id="meta-resolution" class="spec-item-value text-cyan-400">-</div>
-                        </div>
-                        <div class="spec-item">
-                            <div class="spec-item-label">Duration</div>
-                            <div id="meta-duration" class="spec-item-value text-white">-</div>
-                        </div>
-                    </div>
-                    <div class="grid grid-cols-3 gap-2">
-                        <div class="spec-item">
-                            <div class="spec-item-label">FPS</div>
-                            <div id="meta-fps" class="spec-item-value text-xs">-</div>
-                        </div>
-                        <div class="spec-item">
-                            <div class="spec-item-label">Frames</div>
-                            <div id="meta-frames" class="spec-item-value text-xs">-</div>
-                        </div>
-                        <div class="spec-item">
-                            <div class="spec-item-label">Size</div>
-                            <div id="meta-size" class="spec-item-value text-xs">-</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Enhancement Parameters Configuration Card -->
-            <div class="card-panel p-5 bg-[#090d15]">
-                <h4 class="text-xs font-mono uppercase tracking-wider text-slate-300 mb-3 font-semibold">Inference Configuration</h4>
-                
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                    <!-- Frame Limit Parameter -->
-                    <div>
-                        <label for="param-max-frames" class="block text-xs font-medium text-slate-300 mb-1">Temporal Window Length</label>
-                        <select id="param-max-frames" class="custom-select w-full">
-                            <option value="90">Fast Demo Window (90 Frames ~3-6 sec)</option>
-                            <option value="300" selected>Standard Review Window (300 Frames ~10 sec)</option>
-                            <option value="600">Extended Evaluation (600 Frames ~20 sec)</option>
-                            <option value="0">Full Length Recording (All Captured Frames)</option>
-                        </select>
-                        <p class="text-[11px] text-slate-500 mt-1">Recommended for rapid responsive evaluation on laptop GPU.</p>
-                    </div>
-
-                    <!-- Modular Resolution Enhancement (Module C) -->
-                    <div>
-                        <label class="block text-xs font-medium text-slate-300 mb-1">Resolution Enhancement (Module C)</label>
-                        <div class="flex items-center gap-2.5 mt-2">
-                            <input type="checkbox" id="param-super-res" class="w-4 h-4 rounded bg-[#080b12] border-slate-700 text-cyan-500 focus:ring-0 cursor-pointer accent-cyan-400">
-                            <label for="param-super-res" class="text-xs text-slate-300 cursor-pointer font-medium">Enable 2x Super-Resolution</label>
-                        </div>
-                        <p class="text-[11px] text-slate-500 mt-1">Applies edge-preserving high-fidelity upscaling to restored frames.</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Start Execution Action -->
-            <div class="flex justify-end pt-2">
-                <button id="btn-start-enhance" class="btn btn-primary px-6 py-2.5">
-                    <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="m3.75 13.5 10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z" />
+    <div style="display: grid; grid-template-columns: 1.1fr 1fr; gap: 1.25rem;">
+        <!-- Left Column: Ingestion Deck & Preview -->
+        <div>
+            <!-- Dropzone -->
+            <div id="dropzone" class="dropzone" onclick="document.getElementById('video-file-input').click();">
+                <input type="file" id="video-file-input" accept="video/mp4,video/avi,video/quicktime,video/x-matroska" style="display: none;">
+                <div class="dropzone-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width: 100%; height: 100%;">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="17 8 12 3 7 8"></polyline>
+                        <line x1="12" y1="3" x2="12" y2="15"></line>
                     </svg>
-                    <span>Execute STCD AI Enhancement</span>
+                </div>
+                <div class="dropzone-title">Drag video here or click to browse</div>
+                <div class="dropzone-subtitle">Supported formats: MP4, MOV, AVI, MKV</div>
+            </div>
+
+            <!-- Upload Progress Bar (Visible during upload) -->
+            <div id="upload-progress-container" class="card hidden" style="margin-top: 1rem;">
+                <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 0.35rem;">
+                    <span id="upload-status-text" style="color: var(--text-primary);">Uploading video...</span>
+                    <span id="upload-percent-text" class="num" style="color: var(--accent-amber);">0%</span>
+                </div>
+                <div class="progress-track" style="margin: 0;">
+                    <div id="upload-progress-bar" class="progress-fill"></div>
+                </div>
+            </div>
+
+            <!-- Metadata Inspection Card (Visible after upload) -->
+            <div id="preview-section" class="card hidden" style="margin-top: 1rem;">
+                <div class="card-header">
+                    <span class="card-title">Clip information</span>
+                    <span id="meta-audio-tag" class="status-badge" style="font-size: 0.72rem;">Audio checked</span>
+                </div>
+
+                <!-- Video Viewport -->
+                <div style="background-color: #000; border-radius: var(--radius-sm); overflow: hidden; margin-bottom: 0.85rem;">
+                    <video id="client-preview-player" controls playsinline style="width: 100%; display: block; max-height: 220px;"></video>
+                </div>
+
+                <!-- Metadata Grid -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; font-size: 0.78rem;">
+                    <div>
+                        <span style="color: var(--text-muted);">Filename:</span>
+                        <div id="meta-filename" class="tabular" style="color: var(--text-primary); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">--</div>
+                    </div>
+                    <div>
+                        <span style="color: var(--text-muted);">Resolution:</span>
+                        <div id="meta-resolution" class="tabular" style="color: var(--text-primary); font-weight: 500;">--</div>
+                    </div>
+                    <div>
+                        <span style="color: var(--text-muted);">Duration & rate:</span>
+                        <div id="meta-duration-fps" class="tabular" style="color: var(--text-primary); font-weight: 500;">--</div>
+                    </div>
+                    <div>
+                        <span style="color: var(--text-muted);">Frame count:</span>
+                        <div id="meta-frames" class="tabular" style="color: var(--text-primary); font-weight: 500;">--</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Calibration & Presets -->
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">Enhancement calibration</span>
+            </div>
+
+            <!-- Presets Loaded Dynamically from /api/presets -->
+            <div class="form-group">
+                <label class="form-label">Pipeline preset</label>
+                <div id="presets-container" class="preset-grid">
+                    <!-- Populated dynamically via JS from /api/presets -->
+                    <div style="padding: 1rem; text-align: center; color: var(--text-muted); font-size: 0.8rem;">
+                        Loading available presets from configuration...
+                    </div>
+                </div>
+                <input type="hidden" id="param-preset" value="balanced">
+            </div>
+
+            <!-- Processing Duration Cap -->
+            <div class="form-group">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+                    <label class="form-label" style="margin-bottom: 0;">Duration cap</label>
+                    <span id="label-max-seconds" class="tabular" style="font-size: 0.82rem; color: var(--accent-amber);">10.0 seconds</span>
+                </div>
+                <input type="range" id="param-max-seconds" min="3" max="30" step="1" value="10" class="input-slider" oninput="document.getElementById('label-max-seconds').innerText = this.value + '.0 seconds';">
+                <div class="form-help">Limits processed duration for fast evaluation during demonstrations.</div>
+            </div>
+
+            <!-- Enhancement Strength -->
+            <div class="form-group">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+                    <label class="form-label" style="margin-bottom: 0;">Blend strength</label>
+                    <span id="label-strength" class="tabular" style="font-size: 0.82rem; color: var(--accent-amber);">0.85</span>
+                </div>
+                <input type="range" id="param-strength" min="0.1" max="1.0" step="0.05" value="0.85" class="input-slider" oninput="document.getElementById('label-strength').innerText = parseFloat(this.value).toFixed(2);">
+                <div class="form-help">Modulates the linear interpolation between enhanced output and raw footage.</div>
+            </div>
+
+            <!-- Modular Stage Toggles -->
+            <div class="form-group" style="border-top: 1px solid var(--border-rule); padding-top: 0.85rem;">
+                <label class="form-label">Active pipeline stages</label>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem; font-size: 0.8rem;">
+                    <label style="display: flex; align-items: center; gap: 0.4rem; cursor: pointer; color: var(--text-muted);">
+                        <input type="checkbox" id="toggle-stage-denoise" checked style="accent-color: var(--accent-amber);">
+                        <span>Denoise</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.4rem; cursor: pointer; color: var(--text-muted);">
+                        <input type="checkbox" id="toggle-stage-lowlight" checked style="accent-color: var(--accent-amber);">
+                        <span>Low-light</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.4rem; cursor: pointer; color: var(--text-muted);">
+                        <input type="checkbox" id="toggle-stage-sr" style="accent-color: var(--accent-amber);">
+                        <span>Super-resolution</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.4rem; cursor: pointer; color: var(--text-muted);">
+                        <input type="checkbox" id="toggle-stage-temporal" checked style="accent-color: var(--accent-amber);">
+                        <span>Temporal smoothing</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Start Action Button -->
+            <div style="margin-top: 1.5rem;">
+                <button id="btn-start-enhance" class="btn btn-primary" style="width: 100%;" disabled>
+                    Enhance clip
                 </button>
             </div>
         </div>
@@ -140,9 +147,10 @@
 </div>
 {% endblock %}
 
-{% block scripts %}
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
 <script>
-    document.addEventListener("DOMContentLoaded", function() {
+    document.addEventListener("DOMContentLoaded", () => {
         initUploadPage();
     });
 </script>

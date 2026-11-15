@@ -1,317 +1,193 @@
 {% extends "base.html" %}
 
-{% block title %}Video Enhancement Results — DashClarity AI{% endblock %}
+{% block title %}Review & Compare — DashClarity AI{% endblock %}
 
 {% block content %}
-<div class="app-container page-wrapper">
-    <!-- Page Header -->
-    <div class="flex flex-col md:flex-row md:items-end justify-between pb-6 mb-8 border-b border-white/[0.07] gap-4">
+<div class="results-deck">
+    <!-- Header & Job Identification -->
+    <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.75rem;">
         <div>
-            <!-- Eyebrow Badge & Metadata -->
-            <div class="flex items-center gap-2.5 mb-2">
-                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-mono font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                    ENHANCEMENT COMPLETE
-                </span>
-                <span class="text-xs font-mono text-slate-500">ID: <span class="text-slate-400">{{ job_id }}</span></span>
-            </div>
-            
-            <h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-white">Video Enhancement Results</h1>
-            <p class="text-xs sm:text-sm text-slate-400 mt-1">Compare your original dashcam footage with the AI-enhanced output in real-time.</p>
+            <h1 style="font-size: 1.35rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.25rem;">
+                Visual comparison & review
+            </h1>
+            <p style="font-size: 0.82rem; color: var(--text-muted);">
+                Synchronized dual-stream playback. Click loupe or press <kbd style="background: var(--bg-elevated); padding: 0.1rem 0.3rem; border: 1px solid var(--border-rule); border-radius: 3px; font-family: var(--font-mono);">L</kbd> for 3x detail magnification.
+            </p>
         </div>
-
-        <!-- Header Actions -->
-        <div class="flex items-center gap-2.5 flex-shrink-0">
-            <a href="{{ url_for('upload_page') }}" class="btn btn-secondary">
-                <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
-                </svg>
-                <span>Upload Another Video</span>
-            </a>
-            <a href="{{ url_for('api_download_video', job_id=job_id) }}" class="btn btn-primary">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
-                </svg>
-                <span>Download Enhanced Video</span>
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <button class="btn btn-secondary" style="font-size: 0.78rem; padding: 0.35rem 0.65rem;" onclick="toggleShortcutsModal();">
+                Keyboard shortcuts
+            </button>
+            <a href="{{ url_for('upload_page') }}" class="btn btn-secondary" style="font-size: 0.78rem; padding: 0.35rem 0.65rem;">
+                Enhance another clip
             </a>
         </div>
     </div>
 
-    <!-- Comparison View Switcher Toolbar -->
-    <div class="flex items-center justify-between mb-4">
-        <div class="flex items-center gap-2">
-            <span class="text-xs font-mono uppercase tracking-wider text-slate-400 font-semibold">Comparison Mode</span>
-        </div>
-        
-        <!-- Segmented Tab Controls (Linear/Vercel Style) -->
-        <div class="segmented-control">
-            <button id="view-mode-side" onclick="switchViewMode('side')" class="segmented-btn active">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 4.5v15m6-15v15m-10.875 0h17.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125Z" />
-                </svg>
-                <span>Side-by-Side</span>
+    <!-- Warning Banners -->
+    <div id="audio-warning-banner" class="notice notice-warning hidden">
+        <span><strong>Audio notice:</strong> <span id="audio-warning-text">Original video contains no audio stream.</span></span>
+    </div>
+
+    <div id="cpu-warning-banner" class="notice notice-warning hidden">
+        <span><strong>Hardware notice:</strong> Processing completed in CPU fallback mode. Execution throughput was limited.</span>
+    </div>
+
+    <div id="guard-warning-banner" class="notice notice-warning hidden">
+        <span><strong>Quality guard notice:</strong> Output differences from input were near threshold.</span>
+    </div>
+
+    <!-- Deck Mode Toolbar -->
+    <div class="deck-toolbar">
+        <div class="deck-modes">
+            <button id="view-mode-split" class="btn-deck-mode active" onclick="switchViewMode('split');">
+                Split slider
             </button>
-            <button id="view-mode-split" onclick="switchViewMode('split')" class="segmented-btn">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
-                </svg>
-                <span>Split Comparison</span>
+            <button id="view-mode-side" class="btn-deck-mode" onclick="switchViewMode('side');">
+                Side by side
+            </button>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 0.6rem;">
+            <button id="btn-toggle-loupe" class="btn-deck-mode" onclick="toggleLoupe();">
+                <span>Loupe 3x</span>
             </button>
         </div>
     </div>
 
-    <!-- Section C: Side-by-Side Video Players (Labels in Card Headers, NOT Overlapping Video) -->
-    <div id="container-side-by-side" class="space-y-4 mb-8">
-        <div class="comparison-grid">
-            <!-- Left Card: Original Footage -->
-            <div class="video-frame-card">
-                <div class="video-frame-header">
-                    <div class="video-tag original">
-                        <span class="w-2 h-2 rounded-full bg-amber-400"></span>
-                        <span>Original Footage</span>
-                    </div>
-                    <div class="video-meta-badge" id="badge-orig-meta">
-                        <span id="label-orig-res">Source Video</span> &bull; <span id="label-orig-fps">RAW</span>
-                    </div>
-                </div>
-                <div class="video-viewport">
-                    <video id="player-original" playsinline preload="metadata">
-                        <source src="{{ url_for('stream_original_video', job_id=job_id) }}" type="video/mp4">
-                        Your browser does not support HTML5 video playback.
-                    </video>
-                </div>
+    <!-- Active Viewport Canvas -->
+    <div id="viewport-canvas" class="viewport-canvas">
+        <!-- 1. Split Slider Container (Active by default) -->
+        <div id="container-split-slider" class="split-slider-wrap">
+            <!-- Enhanced Background Video -->
+            <video id="split-enhanced-video" src="/media/enhanced/{{ job_id }}" playsinline muted></video>
+
+            <!-- Original Foreground Video (Clipped) -->
+            <div id="split-slider-clip" class="split-clip">
+                <video id="split-original-video" src="/media/original/{{ job_id }}" playsinline muted></video>
+                <div class="side-tag">Input (raw)</div>
             </div>
 
-            <!-- Right Card: AI Enhanced Output -->
-            <div class="video-frame-card">
-                <div class="video-frame-header">
-                    <div class="video-tag enhanced">
-                        <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
-                        <span>AI Enhanced (STCD)</span>
-                    </div>
-                    <div class="video-meta-badge" id="badge-enh-meta">
-                        <span id="label-enh-res">Restored</span> &bull; <span class="text-cyan-400 font-semibold">Zero-Flicker</span>
-                    </div>
-                </div>
-                <div class="video-viewport">
-                    <video id="player-enhanced" playsinline preload="metadata">
-                        <source src="{{ url_for('stream_enhanced_video', job_id=job_id) }}" type="video/mp4">
-                        Your browser does not support HTML5 video playback.
-                    </video>
-                </div>
+            <div class="side-tag" style="left: auto; right: 10px;">Output (enhanced)</div>
+
+            <!-- Slider Drag Handle -->
+            <div id="split-slider-handle" class="split-handle">
+                &#8596;
+            </div>
+
+            <!-- Loupe Magnifier Lens -->
+            <div id="loupe-lens" class="loupe-lens">
+                <canvas id="loupe-canvas" class="loupe-canvas"></canvas>
             </div>
         </div>
 
-        <!-- Section E: Master Synchronized Playback Control Bar -->
-        <div class="master-playback-bar">
-            <!-- Play/Pause Controls -->
-            <div class="flex items-center gap-2">
-                <button id="btn-sync-play" onclick="toggleSyncPlay()" class="btn btn-primary btn-sm">
-                    <svg id="icon-play" class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16ZM9.555 7.168A1 1 0 0 0 8 8v4a1 1 0 0 0 1.555.832l3-2a1 1 0 0 0 0-1.664l-3-2Z" clip-rule="evenodd" />
-                    </svg>
-                    <span id="label-play">Play Both</span>
-                </button>
-                <button onclick="restartSyncVideos()" class="btn btn-secondary btn-sm" title="Restart from beginning">
-                    <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
-                    </svg>
-                </button>
+        <!-- 2. Side-by-Side Dual Container -->
+        <div id="container-side-by-side" class="side-by-side-wrap hidden">
+            <div class="side-viewport" style="border-right: 1px solid var(--border-rule);">
+                <div class="side-tag">Input (raw)</div>
+                <video id="player-original" src="/media/original/{{ job_id }}" playsinline muted></video>
             </div>
-
-            <!-- Scrub Timeline -->
-            <div class="timeline-scrubber">
-                <span id="time-current" class="timeline-time">00:00</span>
-                <input type="range" id="sync-scrub" min="0" max="100" value="0" step="0.1" class="custom-range" aria-label="Playback timeline">
-                <span id="time-duration" class="timeline-time">00:00</span>
-            </div>
-
-            <!-- Speed Selector -->
-            <div class="flex items-center gap-2">
-                <span class="text-xs text-slate-400 font-mono">Speed:</span>
-                <select id="sync-speed" onchange="changeSyncSpeed(this.value)" class="custom-select" aria-label="Playback speed">
-                    <option value="0.25">0.25x (Slow)</option>
-                    <option value="0.5">0.5x</option>
-                    <option value="1.0" selected>1.0x (Normal)</option>
-                    <option value="1.5">1.5x</option>
-                    <option value="2.0">2.0x</option>
-                </select>
+            <div class="side-viewport">
+                <div class="side-tag">Output (enhanced)</div>
+                <video id="player-enhanced" src="/media/enhanced/{{ job_id }}" playsinline muted></video>
             </div>
         </div>
     </div>
 
-    <!-- Section D: Interactive Split-Screen Slider (Mode 2) -->
-    <div id="container-split-slider" class="hidden mb-8 space-y-3">
-        <div class="split-viewer-card" id="split-slider-box">
-            <!-- Enhanced Layer (Base) -->
-            <div class="split-layer-base">
-                <video id="split-enhanced-video" playsinline loop muted autoplay>
-                    <source src="{{ url_for('stream_enhanced_video', job_id=job_id) }}" type="video/mp4">
-                </video>
-            </div>
-            <div class="split-slider-badge-right">AI ENHANCED</div>
+    <!-- Master Synchronized Transport Controller -->
+    <div class="transport-bar">
+        <!-- Play / Pause -->
+        <button id="btn-play-pause" class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.82rem;" onclick="toggleSyncPlay();">
+            <span id="label-play">&#9658; Play</span>
+        </button>
 
-            <!-- Original Layer (Clipped Overlay) -->
-            <div class="split-layer-clip" id="split-slider-clip">
-                <video id="split-original-video" playsinline loop muted autoplay>
-                    <source src="{{ url_for('stream_original_video', job_id=job_id) }}" type="video/mp4">
-                </video>
-            </div>
-            <div class="split-slider-badge-left">ORIGINAL</div>
+        <!-- Frame Step Buttons -->
+        <button class="btn btn-secondary" style="padding: 0.35rem 0.5rem; font-size: 0.75rem;" title="Step backward one frame (Left arrow)" onclick="stepFrame(-1);">
+            &#10094;
+        </button>
+        <button class="btn btn-secondary" style="padding: 0.35rem 0.5rem; font-size: 0.75rem;" title="Step forward one frame (Right arrow)" onclick="stepFrame(1);">
+            &#10095;
+        </button>
 
-            <!-- Draggable Center Handle -->
-            <div class="split-handle-line" id="split-slider-handle">
-                <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 15 12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" />
-                </svg>
-            </div>
-        </div>
-        <p class="text-xs text-center text-slate-500 font-mono">Drag divider horizontally to reveal underlying enhancement details</p>
+        <!-- Timecode Display -->
+        <span class="transport-time">
+            <span id="time-current">00:00.00</span> / <span id="time-duration">00:00.00</span>
+        </span>
+
+        <!-- Timeline Scrubber -->
+        <input type="range" id="sync-scrub" min="0" max="100" step="0.1" value="0" class="transport-scrub">
+
+        <!-- Playback Speed -->
+        <select id="select-speed" class="transport-speed" onchange="changeSyncSpeed(this.value);">
+            <option value="0.25">0.25x</option>
+            <option value="0.5">0.5x</option>
+            <option value="1.0" selected>1.0x</option>
+            <option value="1.5">1.5x</option>
+            <option value="2.0">2.0x</option>
+        </select>
     </div>
 
-    <!-- Section F: Enhancement Statistics Grid -->
-    <div class="mb-8 space-y-4">
-        <div class="flex items-center justify-between">
-            <h2 class="text-xs font-mono uppercase tracking-wider text-slate-400 font-semibold">Technical Metrics & Forensics</h2>
-            <div id="metrics-loading" class="text-xs font-mono text-cyan-400 animate-pulse">Computing telemetry...</div>
-        </div>
-
-        <div id="metrics-grid" class="hidden space-y-4">
-            <!-- Primary 4-Metric Grid -->
-            <div class="metrics-grid-layout">
-                <div class="stat-tile">
-                    <div class="stat-tile-top">
-                        <span class="stat-label">Illumination Gain</span>
-                        <!-- Sun Icon -->
-                        <svg class="stat-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" />
-                        </svg>
-                    </div>
-                    <div class="stat-value text-cyan-400" id="metric-lum-gain">+0.0%</div>
-                    <div class="stat-subtext">Shadow & underexposure recovery</div>
-                </div>
-
-                <div class="stat-tile">
-                    <div class="stat-tile-top">
-                        <span class="stat-label">Contrast Index (CII)</span>
-                        <!-- Contrast Icon -->
-                        <svg class="stat-icon text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-                        </svg>
-                    </div>
-                    <div class="stat-value text-emerald-400" id="metric-contrast-idx">1.00x</div>
-                    <div class="stat-subtext">Root-mean-square dynamic contrast</div>
-                </div>
-
-                <div class="stat-tile">
-                    <div class="stat-tile-top">
-                        <span class="stat-label">Temporal Stability</span>
-                        <!-- Activity / Stability Icon -->
-                        <svg class="stat-icon text-indigo-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
-                        </svg>
-                    </div>
-                    <div class="stat-value text-indigo-400" id="metric-temporal-score">98.5</div>
-                    <div class="stat-subtext">Cross-frame flicker suppression score</div>
-                </div>
-
-                <div class="stat-tile">
-                    <div class="stat-tile-top">
-                        <span class="stat-label">Inference Throughput</span>
-                        <!-- Bolt / Speed Icon -->
-                        <svg class="stat-icon text-blue-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="m3.75 13.5 10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z" />
-                        </svg>
-                    </div>
-                    <div class="stat-value text-white" id="metric-infer-fps">0.0 FPS</div>
-                    <div class="stat-subtext">Execution rate on RTX 4060 GPU</div>
-                </div>
-            </div>
-
-            <!-- Video Container Specs Mini-Grid -->
-            <div class="card-panel p-4">
-                <div class="specs-row">
-                    <div class="spec-item">
-                        <div class="spec-item-label">Input Resolution</div>
-                        <div class="spec-item-value" id="metric-orig-res">-</div>
-                    </div>
-                    <div class="spec-item">
-                        <div class="spec-item-label">Output Resolution</div>
-                        <div class="spec-item-value text-cyan-400" id="metric-enh-res">-</div>
-                    </div>
-                    <div class="spec-item">
-                        <div class="spec-item-label">Original FPS</div>
-                        <div class="spec-item-value" id="metric-orig-fps">-</div>
-                    </div>
-                    <div class="spec-item">
-                        <div class="spec-item-label">Processing Time</div>
-                        <div class="spec-item-value" id="metric-proc-time">-</div>
-                    </div>
-                    <div class="spec-item">
-                        <div class="spec-item-label">Input File Size</div>
-                        <div class="spec-item-value" id="metric-orig-size">-</div>
-                    </div>
-                    <div class="spec-item">
-                        <div class="spec-item-label">Output File Size</div>
-                        <div class="spec-item-value" id="metric-enh-size">-</div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Scientific Ground Truth Transparency Note -->
-            <div class="notice-card scientific flex items-start gap-3">
-                <svg class="w-4 h-4 text-cyan-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" />
-                </svg>
-                <div class="text-[11px] leading-relaxed">
-                    <strong class="text-slate-300">Scientific Integrity Standard:</strong>
-                    <span id="metric-ground-truth-note">
-                        Real-world arbitrary dashcam recordings lack high-exposure ground truth references. PSNR/SSIM are reported exclusively on paired benchmark datasets. For uploaded incident videos, no-reference luminance expansion and temporal gradient consistency are reported without fabricated scores.
-                    </span>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Section G: Compact Download Action Card -->
-    <div class="download-action-card mb-8">
-        <div class="file-info-badge">
-            <div class="file-icon-box">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" />
-                </svg>
-            </div>
-            <div>
-                <div class="text-sm font-bold text-white tracking-tight" id="download-card-filename">DashClarity_Enhanced_{{ job_id }}.mp4</div>
-                <div class="text-xs text-slate-400 font-mono mt-0.5">Format: <span class="text-slate-300">H.264 / MP4 (yuv420p)</span> &bull; Audio: <span class="text-emerald-400">Synchronized</span></div>
-            </div>
-        </div>
-
-        <a href="{{ url_for('api_download_video', job_id=job_id) }}" class="btn btn-primary">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
-            </svg>
-            <span>Download Enhanced MP4</span>
+    <!-- Download & Export Actions -->
+    <div style="display: flex; gap: 0.75rem; margin-top: 1rem; flex-wrap: wrap;">
+        <a id="btn-download-enhanced" href="/api/download/{{ job_id }}" class="btn btn-primary" download>
+            Download enhanced video
+        </a>
+        <a id="btn-download-comparison" href="/api/download/{{ job_id }}?mode=comparison" class="btn btn-secondary" download>
+            Download side-by-side clip
         </a>
     </div>
 
-    <!-- Forensic Legal & Insurance Notice Banner -->
-    <div class="notice-card legal flex items-start gap-3">
-        <svg class="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
-        </svg>
-        <div>
-            <strong class="font-bold text-amber-300 block mb-0.5">Forensic Disclaimer for Insurance Claims & Incident Review:</strong>
-            DashClarity AI implements Retinex-based deep illumination recovery and reflectance decomposition. The enhanced output modifies visual brightness distributions to assist human investigators. It must not be treated as independent proof of sub-pixel details absent from the original camera bitstream. Always submit raw source footage alongside AI-enhanced footage in formal claims dossiers.
+    <!-- Generic Scientific Quality Metrics Panel -->
+    <div class="metrics-section">
+        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.4rem;">
+            <h2 style="font-size: 1.05rem; font-weight: 600; color: var(--text-primary);">
+                Visual quality and stability metrics
+            </h2>
+            <span style="font-size: 0.75rem; color: var(--text-muted);">
+                Values extracted from <code style="font-family: var(--font-mono);">metrics.json</code>
+            </span>
+        </div>
+
+        <!-- Dynamic Grid populated via JS from schema_metrics -->
+        <div id="metrics-grid" class="metrics-grid">
+            <div style="grid-column: 1 / -1; padding: 1.5rem; text-align: center; color: var(--text-muted); font-size: 0.85rem;" class="card">
+                Loading authentic metrics...
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Keyboard Shortcuts Modal -->
+<div id="shortcuts-modal" class="hidden" style="position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 100;">
+    <div class="card" style="max-width: 440px; width: 90%; background: var(--bg-surface);">
+        <div class="card-header">
+            <span class="card-title">Keyboard controls</span>
+            <button style="background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.1rem;" onclick="toggleShortcutsModal();">&times;</button>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 0.6rem; font-size: 0.82rem; line-height: 1.5;">
+            <div><kbd style="background: var(--bg-elevated); padding: 0.15rem 0.4rem; border: 1px solid var(--border-rule); border-radius: 3px; font-family: var(--font-mono);">Space</kbd></div>
+            <div style="color: var(--text-primary);">Play / pause synchronized playback</div>
+
+            <div><kbd style="background: var(--bg-elevated); padding: 0.15rem 0.4rem; border: 1px solid var(--border-rule); border-radius: 3px; font-family: var(--font-mono);">&larr; / &rarr;</kbd></div>
+            <div style="color: var(--text-primary);">Step backward / forward one frame</div>
+
+            <div><kbd style="background: var(--bg-elevated); padding: 0.15rem 0.4rem; border: 1px solid var(--border-rule); border-radius: 3px; font-family: var(--font-mono);">S</kbd></div>
+            <div style="color: var(--text-primary);">Toggle split slider / side by side</div>
+
+            <div><kbd style="background: var(--bg-elevated); padding: 0.15rem 0.4rem; border: 1px solid var(--border-rule); border-radius: 3px; font-family: var(--font-mono);">L</kbd></div>
+            <div style="color: var(--text-primary);">Toggle 3x detail loupe</div>
+        </div>
+        <div style="margin-top: 1.25rem; text-align: right;">
+            <button class="btn btn-secondary" onclick="toggleShortcutsModal();">Close</button>
         </div>
     </div>
 </div>
 {% endblock %}
 
-{% block scripts %}
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
 <script>
-    document.addEventListener("DOMContentLoaded", function() {
+    document.addEventListener("DOMContentLoaded", () => {
         initResultsPage("{{ job_id }}");
     });
 </script>

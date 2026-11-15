@@ -1,28 +1,30 @@
 """
 DashClarity AI - Video Processor Coordinator
-Manages asynchronous enhancement jobs, thread-safe progress reporting,
-and end-to-end pipeline execution from raw upload to final enhanced MP4.
+Manages asynchronous enhancement jobs, streaming frame processing, thread-safe progress reporting,
+real-time execution logs, side-by-side comparison rendering, and job history.
 """
 
 import os
+import json
 import time
 import shutil
 import logging
 import threading
+import subprocess
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List, Tuple
 
 import cv2
 import numpy as np
 
 from config import UPLOAD_DIR, OUTPUT_DIR, DEFAULT_MAX_FRAMES
-from src.video_loader import VideoLoader
-from src.enhancement_engine import STCDEnhancer
-from src.video_reconstructor import VideoReconstructor
-from src.quality_metrics import calculate_enhancement_metrics
-from src.metadata import extract_video_metadata
+from src.pipeline.enhancer import VideoEnhancementPipeline
+from src.pipeline.video_stream import StreamingVideoProcessor
+from src.utils.metrics import evaluate_video_metrics
+from src.utils import get_ffmpeg_binary
 
 logger = logging.getLogger("DashClarity.Processor")
+
 
 class JobState:
     """Thread-safe representation of an enhancement job's progress and state."""
@@ -30,7 +32,8 @@ class JobState:
         self.job_id = job_id
         self.input_path = input_path
         self.output_path = None
-        self.status = "queued"  # queued, processing_frames, reconstructing, completed, failed, cancelled
+        self.comparison_path = None
+        self.status = "queued"  # queued, initializing, processing_frames, reconstructing, completed, failed, cancelled
         self.current_stage = "Queued in processing pipeline"
         self.progress_percent = 0.0
         self.frames_processed = 0
@@ -40,9 +43,19 @@ class JobState:
         self.elapsed_seconds = 0.0
         self.start_time = 0.0
         self.error_message = None
+        self.audio_warning = None
         self.cancel_requested = False
         self.metrics = {}
+        self.logs: List[str] = []
         self.lock = threading.Lock()
+        self.add_log("Job initialized and queued.")
+
+    def add_log(self, message: str):
+        with self.lock:
+            ts = time.strftime("%H:%M:%S")
+            self.logs.append(f"[{ts}] {message}")
+            if len(self.logs) > 300:
+                self.logs = self.logs[-300:]
 
     def update(self, **kwargs):
         with self.lock:
@@ -63,8 +76,11 @@ class JobState:
                 "eta_seconds": round(self.eta_seconds, 1),
                 "elapsed_seconds": round(self.elapsed_seconds, 1),
                 "error": self.error_message,
+                "audio_warning": self.audio_warning,
                 "metrics": self.metrics,
-                "has_enhanced_video": self.output_path is not None and os.path.exists(self.output_path)
+                "logs": list(self.logs),
+                "has_enhanced_video": self.output_path is not None and os.path.exists(self.output_path),
+                "has_comparison_video": self.comparison_path is not None and os.path.exists(self.comparison_path)
             }
 
 
@@ -80,64 +96,51 @@ class ProcessingManager:
     def __init__(self):
         self.jobs: Dict[str, JobState] = {}
         self.jobs_lock = threading.Lock()
+        self.pipeline = None
+
+    def get_pipeline(self) -> VideoEnhancementPipeline:
+        if self.pipeline is None:
+            self.pipeline = VideoEnhancementPipeline()
+        return self.pipeline
 
     def get_job(self, job_id: str) -> Optional[JobState]:
         with self.jobs_lock:
             if job_id in self.jobs:
                 return self.jobs[job_id]
-                
+
             # Check if completed video exists on disk from prior run
             out_candidate = OUTPUT_DIR / f"enhanced_{job_id}.mp4"
+            metrics_candidate = OUTPUT_DIR / f"enhanced_{job_id}.json"
+            comp_candidate = OUTPUT_DIR / f"comparison_{job_id}.mp4"
+
             if out_candidate.exists():
                 input_matches = list(UPLOAD_DIR.glob(f"*{job_id}*"))
                 if not input_matches:
                     input_matches = list(UPLOAD_DIR.glob("sample_*.mp4"))
                 input_path = str(input_matches[0]) if input_matches else str(out_candidate)
-                
+
                 job = JobState(job_id, input_path)
                 job.output_path = str(out_candidate)
+                if comp_candidate.exists():
+                    job.comparison_path = str(comp_candidate)
                 job.status = "completed"
                 job.progress_percent = 100.0
                 job.current_stage = "Enhancement complete. Ready for review and download."
-                
-                try:
-                    cap_in = cv2.VideoCapture(input_path)
-                    w = int(cap_in.get(cv2.CAP_PROP_FRAME_WIDTH)) or 640
-                    h = int(cap_in.get(cv2.CAP_PROP_FRAME_HEIGHT)) or 360
-                    fps = float(cap_in.get(cv2.CAP_PROP_FPS)) or 30.0
-                    cap_in.release()
-                    
-                    orig_size = os.path.getsize(input_path) if os.path.exists(input_path) else 83269
-                    enh_size = os.path.getsize(str(out_candidate)) if out_candidate.exists() else 149821
-                    
-                    job.metrics = {
-                        "technical_summary": {
-                            "original_resolution": f"{w}x{h}",
-                            "enhanced_resolution": f"{w}x{h}",
-                            "original_fps": fps,
-                            "processing_fps": 4.5,
-                            "total_processing_time_sec": 4.0,
-                            "original_file_size_bytes": orig_size,
-                            "enhanced_file_size_bytes": enh_size
-                        },
-                        "illumination_analysis": {
-                            "mean_luminance_original": 14.2,
-                            "mean_luminance_enhanced": 92.8,
-                            "illumination_gain_percent": 553.5,
-                            "contrast_improvement_index": 3.85,
-                            "temporal_stability_index": 98.2
-                        },
-                        "ground_truth_reference": {
-                            "is_reference_available": False,
-                            "note": "Reference Ground-Truth Not Applicable for real-world uploaded dashcam video. No fake PSNR/SSIM generated."
-                        }
-                    }
-                except Exception:
-                    pass
-                    
+
+                # Read authentic metrics from disk metrics.json
+                if metrics_candidate.exists():
+                    try:
+                        with open(metrics_candidate, "r", encoding="utf-8") as f:
+                            job.metrics = json.load(f)
+                    except Exception as e:
+                        logger.warning("Could not read metrics JSON for job %s: %s", job_id, e)
+                else:
+                    job.metrics = {}
+
+                job.add_log("Job loaded from disk cache.")
                 self.jobs[job_id] = job
                 return job
-                
+
             return None
 
     def create_job(self, job_id: str, input_path: str) -> JobState:
@@ -152,195 +155,285 @@ class ProcessingManager:
             job.cancel_requested = True
             job.status = "cancelling"
             job.current_stage = "Cancellation requested..."
+            job.add_log("Cancellation requested by user.")
             return True
         return False
 
     def start_enhancement_async(
         self,
         job_id: str,
-        max_frames: Optional[int] = DEFAULT_MAX_FRAMES,
-        super_res: bool = False
+        preset: str = "full",
+        strength: float = 1.0,
+        max_seconds: Optional[float] = None,
+        frame_skip: int = 1,
+        restore_at_original_res: Optional[bool] = None,
+        stage_overrides: Optional[Dict[str, bool]] = None,
+        **kwargs
     ):
         job = self.get_job(job_id)
         if not job:
             raise ValueError(f"Job {job_id} not found.")
 
+        # Backwards compatibility for legacy calls
+        if "max_frames" in kwargs and max_seconds is None:
+            max_seconds = float(kwargs["max_frames"]) / 30.0
+        if "super_res" in kwargs and not kwargs["super_res"]:
+            if preset == "full":
+                preset = "low_light"
+
         thread = threading.Thread(
             target=self._run_pipeline,
-            args=(job, max_frames, super_res),
+            args=(job, preset, strength, max_seconds, frame_skip, restore_at_original_res, stage_overrides),
             daemon=True
         )
         thread.start()
 
-    def _run_pipeline(self, job: JobState, max_frames: Optional[int], super_res: bool):
+    def _run_pipeline(
+        self,
+        job: JobState,
+        preset: str,
+        strength: float,
+        max_seconds: Optional[float],
+        frame_skip: int,
+        restore_at_original_res: Optional[bool],
+        stage_overrides: Optional[Dict[str, bool]] = None
+    ):
         job.update(
             status="initializing",
-            current_stage="Initializing STCD neural model on GPU...",
+            current_stage=f"Initializing {preset} enhancement pipeline on GPU...",
             start_time=time.time(),
             progress_percent=2.0
         )
-        
-        temp_dir = OUTPUT_DIR / f"temp_{job.job_id}"
-        temp_dir.mkdir(parents=True, exist_ok=True)
-        temp_audio = temp_dir / "audio_track.aac"
-        frames_dir = temp_dir / "frames"
-        frames_dir.mkdir(parents=True, exist_ok=True)
-        
+        job.add_log(f"Starting pipeline with preset: {preset}, blend strength: {strength:.2f}")
+
         output_filename = f"enhanced_{job.job_id}.mp4"
         final_output_path = OUTPUT_DIR / output_filename
-        
-        loader = None
+        metrics_json_path = OUTPUT_DIR / f"enhanced_{job.job_id}.json"
+
         try:
-            # 1. Video Loading and Metadata
-            loader = VideoLoader(job.input_path)
-            total_video_frames = loader.get_frame_count()
-            target_frames = min(total_video_frames, max_frames) if max_frames else total_video_frames
-            fps = loader.get_fps()
-            orig_w, orig_h = loader.get_dimensions()
-            
+            pipeline = self.get_pipeline()
+            pipeline.reset_temporal()
+            job.add_log(f"Compute hardware initialized: {pipeline.device} (fp16={pipeline.fp16})")
+
+            # Initialize Streaming Processor
+            streamer = StreamingVideoProcessor(
+                input_path=job.input_path,
+                output_path=str(final_output_path),
+                max_seconds=max_seconds,
+                frame_skip=frame_skip
+            )
+
             job.update(
-                total_frames=target_frames,
-                current_stage="Extracting audio track for synchronized reconstruction...",
+                total_frames=streamer.total_target_frames,
+                status="processing_frames",
+                current_stage=f"Executing {preset} pipeline ({streamer.fps:.1f} FPS target)...",
                 progress_percent=5.0
             )
-            
-            # 2. Audio Extraction
-            has_audio = loader.extract_audio(str(temp_audio))
-            
-            # 3. Model Engine Setup
-            enhancer = STCDEnhancer.get_instance()
-            
-            job.update(
-                status="processing_frames",
-                current_stage="Executing STCD spatial-temporal video decomposition...",
-                progress_percent=8.0
-            )
-            
-            # 4. Sequential Frame Processing with Cross-Frame Attention
-            frames_buffer = []
-            for idx, frame in loader.stream_frames(max_frames=target_frames):
-                frames_buffer.append(frame)
-                
-            actual_frame_count = len(frames_buffer)
-            if actual_frame_count == 0:
-                raise ValueError("Could not decode any valid video frames from input.")
-                
-            job.update(total_frames=actual_frame_count)
-            
-            sample_orig_frames = []
-            sample_enh_frames = []
-            sample_interval = max(1, actual_frame_count // 10)
-            
-            t_process_start = time.time()
-            
-            for i in range(actual_frame_count):
+            job.add_log(f"Ingested stream: {streamer.in_width}x{streamer.in_height} @ {streamer.fps:.1f} FPS ({streamer.total_target_frames} frames to process)")
+            if streamer.audio_extracted:
+                job.add_log("Audio stream detected and extracted for final multiplexing.")
+            else:
+                job.add_log(f"Audio note: {streamer.audio_warning or 'No audio stream.'}")
+
+            last_log_frame = 0
+
+            def on_progress(telemetry):
+                nonlocal last_log_frame
                 if job.cancel_requested:
-                    job.update(status="cancelled", current_stage="Job cancelled by user.")
-                    return
-                    
-                frame_current = frames_buffer[i]
-                
-                # Pair with next frame, or previous frame for final index
-                if i < actual_frame_count - 1:
-                    frame_neighbor = frames_buffer[i + 1]
-                else:
-                    frame_neighbor = frames_buffer[i - 1] if actual_frame_count > 1 else frame_current
-                    
-                enh_dict = enhancer.enhance_frame_pair(frame_current, frame_neighbor)
-                frame_enh = enh_dict["enhanced"]
-                
-                # Optional Super-Resolution (Module C)
-                if super_res:
-                    frame_enh = enhancer.apply_super_resolution(frame_enh, scale=2.0)
-                    
-                # Save frame
-                frame_path = frames_dir / f"frame_{i:06d}.png"
-                cv2.imwrite(str(frame_path), frame_enh)
-                
-                # Collect metrics samples
-                if i % sample_interval == 0:
-                    sample_orig_frames.append(frame_current)
-                    sample_enh_frames.append(frame_enh)
-                    
-                # Progress calculation
-                elapsed = time.time() - t_process_start
-                frames_done = i + 1
-                curr_fps = frames_done / elapsed if elapsed > 0 else 0.0
-                remaining_frames = actual_frame_count - frames_done
-                eta = remaining_frames / curr_fps if curr_fps > 0 else 0.0
-                pct = 8.0 + (frames_done / actual_frame_count) * 75.0
-                
+                    raise KeyboardInterrupt("Cancelled by user")
                 job.update(
-                    frames_processed=frames_done,
-                    current_fps=curr_fps,
-                    eta_seconds=eta,
-                    elapsed_seconds=elapsed,
-                    progress_percent=pct,
-                    current_stage=f"Enhancing frame {frames_done}/{actual_frame_count} ({curr_fps:.1f} FPS)"
+                    frames_processed=telemetry["frames_processed"],
+                    current_fps=telemetry["fps"],
+                    eta_seconds=telemetry["eta_seconds"],
+                    elapsed_seconds=telemetry["elapsed_seconds"],
+                    progress_percent=telemetry["progress_percent"],
+                    current_stage=telemetry["stage"]
                 )
-                
-            total_processing_time = time.time() - t_process_start
-            
-            # 5. Reconstruct Video
-            job.update(
-                status="reconstructing",
-                current_stage="Reconstructing enhanced video with H.264 & audio muxing...",
-                progress_percent=86.0
+                done = telemetry["frames_processed"]
+                if done - last_log_frame >= 60 or done == streamer.total_target_frames:
+                    job.add_log(f"Processed {done}/{streamer.total_target_frames} frames ({telemetry['fps']:.1f} FPS, ETA: {telemetry['eta_seconds']:.1f}s)")
+                    last_log_frame = done
+
+            def frame_fn(frame, prev):
+                return pipeline.enhance_frame(
+                    frame_bgr=frame,
+                    frame_neighbor=prev,
+                    preset=preset,
+                    strength=strength,
+                    restore_at_original_res=restore_at_original_res
+                )
+
+            # Execute streaming video processing
+            result_info = streamer.process(
+                frame_transform_fn=frame_fn,
+                progress_callback=on_progress
             )
-            
-            enh_h, enh_w = (orig_h * 2, orig_w * 2) if super_res else (orig_h, orig_w)
-            reconstructor = VideoReconstructor(
-                output_path=str(final_output_path),
-                fps=fps,
-                width=enh_w,
-                height=enh_h,
-                audio_path=str(temp_audio) if has_audio else None
-            )
-            reconstructor.assemble_from_frame_dir(str(frames_dir))
-            
-            # 6. Quality Metrics Analysis
+
+            sample_origs = result_info["sample_orig_frames"]
+            sample_enhs = result_info["sample_enh_frames"]
+
+            # Output-differs-from-input guard check on final output
+            if sample_origs and sample_enhs:
+                pipeline.verify_output_transformation(sample_origs[0], sample_enhs[0])
+                job.add_log("Quality guard verified: Output confirmed distinct from input.")
+
+            # Compute authentic real metrics and save directly to metrics.json
             job.update(
-                current_stage="Computing authentic visual quality and stability metrics...",
+                current_stage="Calculating visual quality & stability metrics...",
                 progress_percent=95.0
             )
-            
-            orig_size = os.path.getsize(job.input_path)
-            enh_size = os.path.getsize(str(final_output_path))
-            
-            metrics = calculate_enhancement_metrics(
-                sample_orig_frames=sample_orig_frames,
-                sample_enh_frames=sample_enh_frames,
-                processing_time=total_processing_time,
+            job.add_log("Calculating photometric, noise, and stability metrics...")
+
+            orig_size = os.path.getsize(job.input_path) if os.path.exists(job.input_path) else 0
+            enh_size = os.path.getsize(str(final_output_path)) if final_output_path.exists() else 0
+
+            real_metrics = evaluate_video_metrics(
+                sample_orig_frames=sample_origs,
+                sample_enh_frames=sample_enhs,
+                processing_time=result_info["total_time_seconds"],
                 orig_file_size=orig_size,
                 enh_file_size=enh_size,
-                orig_res=f"{orig_w}x{orig_h}",
-                enh_res=f"{enh_w}x{enh_h}",
-                orig_fps=fps
+                orig_res=f"{streamer.in_width}x{streamer.in_height}",
+                enh_res=f"{result_info['out_width']}x{result_info['out_height']}",
+                orig_fps=streamer.fps,
+                metrics_json_path=str(metrics_json_path)
             )
-            
+
+            # Generate thumbnail for history view
+            self.get_or_create_thumbnail(job.job_id)
+
             job.update(
                 status="completed",
                 output_path=str(final_output_path),
                 current_stage="Enhancement complete. Ready for review and download.",
                 progress_percent=100.0,
-                metrics=metrics
+                metrics=real_metrics,
+                audio_warning=result_info.get("audio_warning")
             )
-            logger.info(f"Job {job.job_id} successfully completed in {total_processing_time:.2f}s.")
-            
+            job.add_log(f"Job completed successfully in {result_info['total_time_seconds']:.2f}s ({result_info['processing_fps']:.1f} FPS avg).")
+            logger.info("Job %s completed successfully in %.2fs", job.job_id, result_info["total_time_seconds"])
+
+        except KeyboardInterrupt:
+            job.update(status="cancelled", current_stage="Job cancelled by user.")
+            job.add_log("Job was cancelled by the user.")
         except Exception as e:
-            logger.exception(f"Pipeline error in job {job.job_id}: {e}")
+            logger.exception("Pipeline error in job %s: %s", job.job_id, e)
+            job.add_log(f"Error during processing: {str(e)}")
             job.update(
                 status="failed",
                 error_message=str(e),
                 current_stage=f"Processing failed: {str(e)}"
             )
-        finally:
-            if loader:
-                loader.close()
-            # Clean up intermediate frame png files to conserve disk space
-            try:
-                if temp_dir.exists():
-                    shutil.rmtree(temp_dir)
-            except Exception as e:
-                logger.warning(f"Failed to cleanup temp dir {temp_dir}: {e}")
 
+    def generate_comparison_clip(self, job_id: str) -> Optional[str]:
+        """
+        Creates a synchronized side-by-side MP4 comparison using FFmpeg hstack.
+        """
+        job = self.get_job(job_id)
+        if not job or not job.output_path or not os.path.exists(job.output_path):
+            return None
+
+        comp_path = OUTPUT_DIR / f"comparison_{job_id}.mp4"
+        if comp_path.exists() and comp_path.stat().st_size > 1000:
+            job.comparison_path = str(comp_path)
+            return str(comp_path)
+
+        ffmpeg_bin = get_ffmpeg_binary()
+        cmd = [
+            ffmpeg_bin, "-y",
+            "-i", str(job.input_path),
+            "-i", str(job.output_path),
+            "-filter_complex",
+            "[0:v]scale=960:540:force_original_aspect_ratio=decrease,pad=960:540:(ow-iw)/2:(oh-ih)/2[v0];"
+            "[1:v]scale=960:540:force_original_aspect_ratio=decrease,pad=960:540:(ow-iw)/2:(oh-ih)/2[v1];"
+            "[v0][v1]hstack=inputs=2[outv]",
+            "-map", "[outv]",
+            "-c:v", "libx264",
+            "-preset", "fast",
+            "-crf", "20",
+            "-movflags", "+faststart",
+            str(comp_path)
+        ]
+        try:
+            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=90)
+            if res.returncode == 0 and comp_path.exists() and comp_path.stat().st_size > 1000:
+                job.comparison_path = str(comp_path)
+                return str(comp_path)
+            else:
+                logger.error("FFmpeg hstack failed: %s", res.stderr.decode("utf-8", errors="ignore"))
+                return None
+        except Exception as e:
+            logger.error("Exception generating comparison clip: %s", e)
+            return None
+
+    def get_or_create_thumbnail(self, job_id: str) -> Optional[str]:
+        """Extracts and saves a 320x180 JPG thumbnail for history listings."""
+        thumb_path = OUTPUT_DIR / f"thumb_{job_id}.jpg"
+        if thumb_path.exists():
+            return str(thumb_path)
+
+        job = self.get_job(job_id)
+        if not job:
+            return None
+
+        video_path = job.output_path if job.output_path and os.path.exists(job.output_path) else job.input_path
+        if not video_path or not os.path.exists(video_path):
+            return None
+
+        cap = cv2.VideoCapture(str(video_path))
+        if not cap.isOpened():
+            return None
+
+        # Sample at 1 second or first available frame
+        total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        target_f = min(30, max(0, total - 1))
+        cap.set(cv2.CAP_PROP_POS_FRAMES, target_f)
+        ret, frame = cap.read()
+        cap.release()
+
+        if ret and frame is not None:
+            thumb = cv2.resize(frame, (320, 180), interpolation=cv2.INTER_AREA)
+            cv2.imwrite(str(thumb_path), thumb)
+            return str(thumb_path)
+
+        return None
+
+    def list_history(self) -> List[Dict[str, Any]]:
+        """Returns all completed past enhancement jobs sorted chronologically."""
+        history_items = []
+        enhanced_files = list(OUTPUT_DIR.glob("enhanced_*.mp4"))
+        enhanced_files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+
+        for enh_file in enhanced_files:
+            job_id = enh_file.stem.replace("enhanced_", "")
+            json_file = OUTPUT_DIR / f"enhanced_{job_id}.json"
+
+            input_matches = list(UPLOAD_DIR.glob(f"*{job_id}*"))
+            orig_name = Path(input_matches[0]).stem.replace(f"{job_id}_", "") if input_matches else f"clip_{job_id[:8]}"
+
+            metrics = {}
+            if json_file.exists():
+                try:
+                    with open(json_file, "r", encoding="utf-8") as f:
+                        metrics = json.load(f)
+                except Exception:
+                    pass
+
+            tech = metrics.get("technical_summary", {})
+            created_dt = time.strftime("%b %d, %H:%M", time.localtime(enh_file.stat().st_mtime))
+            self.get_or_create_thumbnail(job_id)
+
+            history_items.append({
+                "job_id": job_id,
+                "clip_name": orig_name,
+                "created_at": created_dt,
+                "resolution": tech.get("enhanced_resolution", "720p"),
+                "duration": f"{tech.get('total_processing_time_sec', 0):.1f}s processed",
+                "fps": f"{tech.get('processing_fps', 0):.1f} FPS" if tech.get("processing_fps") else "--",
+                "condition": tech.get("scene_lighting_condition", "Low-light scene"),
+                "thumbnail_url": f"/media/thumbnail/{job_id}",
+                "result_url": f"/results/{job_id}",
+                "download_url": f"/api/download/{job_id}"
+            })
+
+        return history_items

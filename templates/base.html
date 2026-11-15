@@ -1,117 +1,62 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}DashClarity AI — AI-Powered Dashcam Video Enhancement{% endblock %}</title>
-    
-    <!-- Typography -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-    
-    <!-- Tailwind CSS (Utility Framework) -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        canvas: '#07090e',
-                        surface: '#0c1017',
-                        card: 'rgba(15, 20, 31, 0.72)',
-                        cyan: {
-                            400: '#00f2fe',
-                            500: '#06b6d4',
-                            950: '#082f49'
-                        }
-                    },
-                    fontFamily: {
-                        sans: ['Inter', 'sans-serif'],
-                        mono: ['JetBrains Mono', 'monospace']
-                    }
-                }
-            }
-        }
-    </script>
-    
-    <!-- Custom Design System Stylesheet -->
+    <title>{% block title %}DashClarity AI — Dashcam Video Enhancement{% endblock %}</title>
+    <!-- Self-hosted CSS with embedded offline fonts -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     {% block extra_head %}{% endblock %}
 </head>
-<body class="bg-[#07090e] text-slate-100 min-h-screen flex flex-col font-sans antialiased selection:bg-cyan-500/30 selection:text-cyan-200">
+<body>
     <!-- Top Navigation Bar -->
-    <header class="app-navbar">
-        <div class="app-container app-navbar-inner">
-            <!-- Brand Logo -->
-            <a href="{{ url_for('index') }}" class="brand-wrapper group">
-                <div class="brand-icon group-hover:scale-105 transition-transform">
-                    <!-- Video Cam Icon -->
-                    <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" />
-                    </svg>
-                </div>
-                <div class="flex items-center gap-2">
-                    <span class="brand-title">DashClarity<span>AI</span></span>
-                    <span class="brand-tag">STCD 2025</span>
-                </div>
+    <header class="navbar">
+        <div class="container navbar-inner">
+            <!-- Brand -->
+            <a href="{{ url_for('index') }}" class="brand">
+                <span class="brand-glyph">&#9658;</span>
+                <span>DashClarity</span>
+                <span class="brand-tag">video review</span>
             </a>
 
-            <!-- Nav Links -->
-            <nav class="hidden md:flex items-center gap-1">
-                <a href="{{ url_for('index') }}" class="nav-item {% if active_page == 'home' %}active{% endif %}">
-                    Dashboard
+            <!-- Navigation Links -->
+            <nav class="nav-menu">
+                <a href="{{ url_for('index') }}" class="nav-link {% if active_page == 'home' %}active{% endif %}">
+                    Overview
                 </a>
-                <a href="{{ url_for('upload_page') }}" class="nav-item {% if active_page == 'upload' %}active{% endif %}">
-                    Enhance Video
+                <a href="{{ url_for('upload_page') }}" class="nav-link {% if active_page == 'upload' %}active{% endif %}">
+                    Enhance
                 </a>
-                <a href="{{ url_for('about_page') }}" class="nav-item {% if active_page == 'about' %}active{% endif %}">
-                    Architecture & Research
+                <a href="{{ url_for('history_page') }}" class="nav-link {% if active_page == 'history' %}active{% endif %}">
+                    History
+                </a>
+                <a href="{{ url_for('about_page') }}" class="nav-link {% if active_page == 'about' %}active{% endif %}">
+                    Limits & ethics
                 </a>
             </nav>
 
-            <!-- Hardware Badge & Action -->
-            <div class="flex items-center gap-3">
-                <div class="status-pill hidden sm:inline-flex" title="Deep Learning Inference Target">
-                    <span class="status-dot-active"></span>
-                    <span class="text-slate-300 font-medium">RTX 4060 GPU</span>
+            <!-- Hardware Status Pill -->
+            <div class="nav-right">
+                <div class="status-badge" title="Active deep learning execution hardware">
+                    <span class="status-dot"></span>
+                    <span>{{ gpu_name if gpu_available else 'CPU' }}</span>
                 </div>
-
-                <a href="{{ url_for('upload_page') }}" class="btn btn-primary btn-sm">
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
-                    </svg>
-                    <span>Upload Video</span>
-                </a>
             </div>
         </div>
     </header>
 
-    <!-- Main Viewport -->
-    <main class="flex-grow">
-        {% block content %}{% endblock %}
-    </main>
-
-    <!-- Footer -->
-    <footer class="border-t border-white/[0.06] bg-[#05070a] py-8 text-slate-400 text-xs">
-        <div class="app-container">
-            <div class="flex flex-col md:flex-row items-center justify-between gap-4">
-                <div class="flex items-center gap-2">
-                    <span class="font-bold text-white tracking-tight">DashClarity AI</span>
-                    <span class="text-slate-600">&bull;</span>
-                    <span class="font-mono text-[11px] text-slate-400">Low-Light Video Enhancement via Spatial-Temporal Decomposition</span>
-                </div>
-                <div class="flex items-center gap-6 font-mono text-[11px] text-slate-400">
-                    <span>IJCAI 2025 STCD Backbone</span>
-                    <span>PyTorch 2.5.1 + CUDA 12.1</span>
-                    <span class="text-slate-300">&copy; 2026 Academic Deliverable</span>
-                </div>
+    <!-- Main Content Area -->
+    <main>
+        <div class="container">
+            {% block content %}{% endblock %}
+            
+            <!-- Legal & Evidentiary Disclaimer (Persistent) -->
+            <div class="legal-notice">
+                Enhanced footage is not original evidence. AI upscaling can invent detail that was not present in the recording.
             </div>
         </div>
-    </footer>
+    </main>
 
-    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
-    {% block scripts %}{% endblock %}
+    {% block extra_scripts %}{% endblock %}
 </body>
 </html>

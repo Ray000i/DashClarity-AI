@@ -1,81 +1,90 @@
 {% extends "base.html" %}
 
-{% block title %}Processing Video — DashClarity AI{% endblock %}
+{% block title %}Processing Clip — DashClarity AI{% endblock %}
 
 {% block content %}
-<div class="app-container-sm page-wrapper">
-    <div class="card-panel p-6 sm:p-10 relative">
-        <!-- Ambient Radial Glow -->
-        <div class="absolute -top-24 -right-24 w-64 h-64 bg-cyan-500/[0.08] rounded-full blur-3xl pointer-events-none"></div>
-
-        <!-- Header -->
-        <div class="flex items-center justify-between mb-6">
+<div style="max-width: 860px; margin: 1rem auto 2rem auto;">
+    <!-- Active Monitor Deck -->
+    <div class="monitor-deck">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.85rem;">
             <div>
-                <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-cyan-950/80 text-cyan-400 border border-cyan-800/60">
-                    JOB ID: {{ job_id }}
+                <h1 style="font-size: 1.25rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.25rem;">
+                    Enhancement in progress
+                </h1>
+                <p id="stage-text" style="font-size: 0.85rem; color: var(--text-muted);">
+                    <span>Initializing deep learning pipeline...</span>
+                </p>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <span id="status-badge" class="status-badge">
+                    <span id="status-dot" class="status-dot"></span>
+                    <span id="status-text">Processing</span>
                 </span>
-                <h1 class="text-xl sm:text-2xl font-bold tracking-tight text-white mt-2">Enhancing Dashcam Footage</h1>
-            </div>
-            
-            <div id="status-badge" class="px-2.5 py-1 rounded-full text-[11px] font-mono font-semibold bg-cyan-950/80 text-cyan-400 border border-cyan-800/60 flex items-center gap-1.5">
-                <span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping"></span>
-                <span id="status-text">INITIALIZING</span>
+                <button id="btn-cancel" class="btn btn-danger" style="font-size: 0.78rem; padding: 0.35rem 0.65rem;" onclick="cancelProcessing('{{ job_id }}');">
+                    Cancel job
+                </button>
             </div>
         </div>
 
-        <!-- Stage Description -->
-        <p id="stage-text" class="text-xs sm:text-sm text-slate-300 font-mono mb-4 flex items-center gap-2">
-            <svg class="w-4 h-4 text-cyan-400 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            <span>Loading STCD pretrained neural weights on GPU...</span>
-        </p>
-
-        <!-- Progress Track & Fill -->
+        <!-- Progress Bar Track -->
         <div class="progress-track">
-            <div id="progress-bar" class="progress-fill" style="width: 2%"></div>
+            <div id="progress-bar" class="progress-fill"></div>
         </div>
 
-        <!-- 4-Stat Live Telemetry Grid -->
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
-            <div class="stat-tile p-3.5">
-                <div class="stat-label">Progress</div>
-                <div id="metric-percent" class="text-lg font-bold font-mono text-cyan-400">0.0%</div>
+        <!-- Telemetry 4-Cell Row -->
+        <div class="telemetry-row">
+            <div class="telemetry-cell">
+                <div class="telemetry-label">Frames processed</div>
+                <div id="metric-frames" class="telemetry-val">0 / --</div>
             </div>
-            <div class="stat-tile p-3.5">
-                <div class="stat-label">Frames</div>
-                <div id="metric-frames" class="text-lg font-bold font-mono text-white">0 / 0</div>
+            <div class="telemetry-cell">
+                <div class="telemetry-label">Inference rate</div>
+                <div id="metric-fps" class="telemetry-val">-- FPS</div>
             </div>
-            <div class="stat-tile p-3.5">
-                <div class="stat-label">GPU Speed</div>
-                <div id="metric-fps" class="text-lg font-bold font-mono text-white">0.0 FPS</div>
+            <div class="telemetry-cell">
+                <div class="telemetry-label">Estimated time remaining</div>
+                <div id="metric-eta" class="telemetry-val">--:--</div>
             </div>
-            <div class="stat-tile p-3.5">
-                <div class="stat-label">Est. Time Remaining</div>
-                <div id="metric-eta" class="text-lg font-bold font-mono text-white">--:--</div>
+            <div class="telemetry-cell">
+                <div class="telemetry-label">Elapsed time</div>
+                <div id="metric-elapsed" class="telemetry-val">00:00</div>
             </div>
         </div>
 
-        <!-- Error Card (Hidden unless an error triggers) -->
-        <div id="error-box" class="hidden mb-6 p-4 rounded-lg bg-red-950/40 border border-red-800/60 text-red-300 text-xs font-mono">
-            <strong>Error:</strong> <span id="error-message"></span>
+        <!-- Failure Diagnosis Box (Hidden unless failed) -->
+        <div id="error-box" class="notice notice-alert hidden" style="margin-top: 1.25rem;">
+            <div style="flex: 1;">
+                <div style="font-weight: 600; margin-bottom: 0.25rem;">Processing failed</div>
+                <div id="error-message" class="tabular" style="font-size: 0.8rem; margin-bottom: 0.5rem; word-break: break-all;">--</div>
+                <div style="font-size: 0.78rem; color: #ffb3b3;">
+                    <strong>Troubleshooting recommendation:</strong>
+                    <ul style="margin-left: 1.2rem; margin-top: 0.2rem; line-height: 1.4;">
+                        <li>Verify video container is non-corrupt and supported (H.264 MP4 recommended).</li>
+                        <li>Reduce duration cap in upload settings (e.g., 5 to 10 seconds).</li>
+                        <li>Switch to Fast preset if encountering GPU memory constraints.</li>
+                    </ul>
+                </div>
+            </div>
         </div>
 
-        <!-- Action Footer -->
-        <div class="flex items-center justify-between pt-4 border-t border-white/[0.08]">
-            <button id="btn-cancel" onclick="cancelProcessing('{{ job_id }}')" class="btn btn-danger btn-sm">
-                <span>Cancel Processing</span>
-            </button>
-            <span class="text-[11px] text-slate-500 font-mono">Hardware: NVIDIA RTX 4060 &bull; PyTorch 2.5.1 CUDA</span>
+        <!-- Execution Log Drawer -->
+        <div style="margin-top: 1.5rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+                <span style="font-size: 0.8rem; font-weight: 500; color: var(--text-primary);">Execution log stream</span>
+                <span id="log-count" class="tabular" style="font-size: 0.72rem; color: var(--text-muted);">0 events</span>
+            </div>
+            <div id="log-drawer" class="log-drawer">
+                <div class="log-entry" style="color: var(--text-dim);">Awaiting pipeline telemetry messages...</div>
+            </div>
         </div>
     </div>
 </div>
 {% endblock %}
 
-{% block scripts %}
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
 <script>
-    document.addEventListener("DOMContentLoaded", function() {
+    document.addEventListener("DOMContentLoaded", () => {
         startStatusPolling("{{ job_id }}");
     });
 </script>

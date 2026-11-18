@@ -97,51 +97,25 @@ class LowLightStage:
             self._model_fp16_checked = True
 
         with torch.inference_mode():
-            # 1. Shadow Chroma Denoising (ISP standard):
-            # When raw sensor shadows have dark current or IR bias (e.g. Red >> Blue/Green in pitch black pixels),
-            # pull near-black pixels towards achromatic neutral before Zero-DCE curve boost.
-            y_in = 0.299 * t_rgb[:, 0:1] + 0.587 * t_rgb[:, 1:2] + 0.114 * t_rgb[:, 2:3]
-            shadow_chroma_weight = torch.clamp((y_in * 255.0 - 6.0) / 30.0, 0.0, 1.0)
-            t_rgb_pre = y_in + (t_rgb - y_in) * shadow_chroma_weight
+            enh_t, _ = self.model(t_rgb)
 
-            enh_t, _ = self.model(t_rgb_pre)
+            # Global smooth Gray-World color balance (pure scalar multipliers):
+            # Normalizes red/blue sensor biases without any per-pixel thresholds,
+            # eliminating contour bands, steps, or topographic ripple artifacts.
+            r_m = enh_t[:, 0].mean()
+            g_m = enh_t[:, 1].mean()
+            b_m = enh_t[:, 2].mean()
+            luma = 0.299 * r_m + 0.587 * g_m + 0.114 * b_m
+            kr = torch.clamp(luma / (r_m + 1e-4), 0.45, 1.45)
+            kg = torch.clamp(luma / (g_m + 1e-4), 0.70, 1.45)
+            kb = torch.clamp(luma / (b_m + 1e-4), 0.70, 1.45)
+            enh_clean = torch.cat([enh_t[:, 0:1] * kr, enh_t[:, 1:2] * kg, enh_t[:, 2:3] * kb], dim=1).clamp(0.0, 1.0)
 
-            # Post-neutralize any residual shadow chromatic runaway
-            y_enh = 0.299 * enh_t[:, 0:1] + 0.587 * enh_t[:, 1:2] + 0.114 * enh_t[:, 2:3]
-            shadow_chroma_weight_post = torch.clamp((y_enh * 255.0 - 15.0) / 45.0, 0.35, 1.0)
-            enh_t = y_enh + (enh_t - y_enh) * shadow_chroma_weight_post
-
-            # 2. Gray-World chromatic balance on GPU: prevents color casts across sky and road
-            t_gray = y_in.squeeze(1) * 255.0
-            mask = (t_gray > 15.0) & (t_gray < 220.0)
-            if mask.sum() > 100:
-                r_m = enh_t[:, 0][mask].mean()
-                g_m = enh_t[:, 1][mask].mean()
-                b_m = enh_t[:, 2][mask].mean()
-                avg_m = (r_m + g_m + b_m) * (1.0 / 3.0)
-                kr = torch.clamp(avg_m / (r_m + 1e-5), 0.75, 1.25)
-                kg = torch.clamp(avg_m / (g_m + 1e-5), 0.75, 1.25)
-                kb = torch.clamp(avg_m / (b_m + 1e-5), 0.75, 1.25)
-                enh_t = torch.cat([enh_t[:, 0:1] * kr, enh_t[:, 1:2] * kg, enh_t[:, 2:3] * kb], dim=1)
-
-            # 2. Adaptive Black-Level Preservation & Highlight Knee Compression on GPU
-            mean_lum_t = float(t_gray.mean())
-            suppress_strength = float(np.clip((mean_lum_t - 20.0) / 40.0, 0.0, 1.0))
-            y_coords = torch.linspace(0, 1, h, device=self.device).view(1, 1, h, 1)
-            sky_spatial = torch.clamp((0.40 - y_coords) / 0.20, 0.0, 1.0)
-            pixel_toe = torch.clamp((t_gray - 12.0) / 48.0, 0.0, 1.0).unsqueeze(1)
-            sky_attenuation = (1.0 - 0.08) * (1.0 - pixel_toe)
-            b_mask = 1.0 - sky_spatial * sky_attenuation * suppress_strength
-
-            # Highlight knee: oncoming headlights and specular reflections do NOT bloom
-            h_mask = torch.clamp((242.0 - t_gray) * (1.0 / 60.0), 0.0, 1.0).unsqueeze(1)
-            gain_mask = b_mask * h_mask
-
-            # Modulate lift on GPU
-            out_t = t_rgb + (enh_t - t_rgb) * gain_mask
-
+            # Modulate with adaptive exposure strength
             if adaptive_strength < 1.0:
-                out_t = t_rgb + (out_t - t_rgb) * adaptive_strength
+                out_t = t_rgb + (enh_clean - t_rgb) * adaptive_strength
+            else:
+                out_t = enh_clean
 
             out_bgr_t = out_t[:, [2, 1, 0], :, :].clamp(0.0, 1.0) * 255.0
             out_bgr = np.ascontiguousarray(out_bgr_t.squeeze(0).byte().permute(1, 2, 0).cpu().numpy())
@@ -231,26 +205,9 @@ class NeuralDenoiseStage:
             denoised_bgr = (out_np * 255.0).round().astype(np.uint8)
             denoised_bgr = cv2.cvtColor(denoised_bgr, cv2.COLOR_RGB2BGR)
 
-        # Micro-contrast and edge sharpness restoration:
-        # Prevents waxy/plastic look by restoring structural edges (license plates, headlights, contours)
-        lab = cv2.cvtColor(denoised_bgr, cv2.COLOR_BGR2LAB)
-        l, a, b = cv2.split(lab)
-        l_float = l.astype(np.float32)
-        l_blur = cv2.GaussianBlur(l_float, (0, 0), sigmaX=1.2)
-        detail = l_float - l_blur
-        edge_mask = np.clip(np.abs(detail) / 10.0, 0.0, 1.0)
-        l_sharp = np.clip(l_float + 0.35 * detail * edge_mask, 0, 255).astype(np.uint8)
-        denoised_bgr = cv2.cvtColor(cv2.merge([l_sharp, a, b]), cv2.COLOR_LAB2BGR)
-
-        # Retain 10% of raw organic texture
-        if denoised_bgr.shape != frame_bgr.shape:
-            denoised_bgr = cv2.resize(denoised_bgr, (frame_bgr.shape[1], frame_bgr.shape[0]), interpolation=cv2.INTER_LINEAR)
-        if denoised_bgr.dtype != frame_bgr.dtype:
-            denoised_bgr = denoised_bgr.astype(frame_bgr.dtype)
-
-        denoised_bgr = cv2.addWeighted(denoised_bgr, 0.90, frame_bgr, 0.10, 0)
-
         if strength < 1.0:
+            if denoised_bgr.shape != frame_bgr.shape:
+                denoised_bgr = cv2.resize(denoised_bgr, (frame_bgr.shape[1], frame_bgr.shape[0]), interpolation=cv2.INTER_LINEAR)
             return cv2.addWeighted(denoised_bgr, strength, frame_bgr, 1.0 - strength, 0)
         return denoised_bgr
 

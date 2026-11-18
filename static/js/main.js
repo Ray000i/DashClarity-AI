@@ -397,23 +397,46 @@ function initSyncPlayback() {
 
     enhPlayer.addEventListener("loadedmetadata", () => {
         if (dur) dur.innerText = formatTimeMs(enhPlayer.duration);
+        if (origPlayer) origPlayer.currentTime = enhPlayer.currentTime;
     });
 
     enhPlayer.addEventListener("timeupdate", () => {
         if (!scrub) return;
-        const progress = (enhPlayer.currentTime / enhPlayer.duration) * 100;
+        const maxDur = enhPlayer.duration || 1;
+        const progress = (enhPlayer.currentTime / maxDur) * 100;
         if (!isNaN(progress)) {
             scrub.value = progress;
             if (cur) cur.innerText = formatTimeMs(enhPlayer.currentTime);
         }
-        if (origPlayer && Math.abs(origPlayer.currentTime - enhPlayer.currentTime) > 0.05) {
+        // Strict lock: enforce original video tracks enhanced video time exactly
+        if (origPlayer && Math.abs(origPlayer.currentTime - enhPlayer.currentTime) > 0.04) {
             origPlayer.currentTime = enhPlayer.currentTime;
+        }
+    });
+
+    // Guard: Prevent raw player from overrunning when enhanced video finishes
+    enhPlayer.addEventListener("ended", () => {
+        if (origPlayer) {
+            origPlayer.pause();
+            origPlayer.currentTime = enhPlayer.duration;
+        }
+        isPlaying = false;
+        const playLabel = document.getElementById("label-play");
+        if (playLabel) playLabel.innerHTML = "&#9658; Play";
+    });
+
+    // Guard: Prevent raw video from advancing beyond the capped enhanced duration
+    origPlayer.addEventListener("timeupdate", () => {
+        if (enhPlayer && enhPlayer.duration && origPlayer.currentTime > enhPlayer.duration) {
+            origPlayer.pause();
+            origPlayer.currentTime = enhPlayer.duration;
         }
     });
 
     if (scrub) {
         scrub.addEventListener("input", (e) => {
-            const targetTime = (e.target.value / 100) * enhPlayer.duration;
+            const maxDur = enhPlayer.duration || 1;
+            const targetTime = (e.target.value / 100) * maxDur;
             if (!isNaN(targetTime)) {
                 if (origPlayer) origPlayer.currentTime = targetTime;
                 enhPlayer.currentTime = targetTime;
@@ -432,6 +455,11 @@ function toggleSyncPlay() {
         isPlaying = false;
         if (playLabel) playLabel.innerHTML = "&#9658; Play";
     } else {
+        // Auto-rewind if at end
+        if (enhPlayer.duration && enhPlayer.currentTime >= (enhPlayer.duration - 0.1)) {
+            enhPlayer.currentTime = 0;
+            origPlayer.currentTime = 0;
+        }
         origPlayer.currentTime = enhPlayer.currentTime;
         const p1 = origPlayer.play().catch(e => console.warn("Original video playback notice:", e));
         const p2 = enhPlayer.play().catch(e => console.warn("Enhanced video playback notice:", e));

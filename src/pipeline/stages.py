@@ -184,8 +184,8 @@ class NeuralDenoiseStage:
 
         h, w = frame_bgr.shape[:2]
 
-        if self.fast_mode:
-            # Fast balanced mode: infer at 0.5x resolution untiled (~148 ms / 6.7 FPS), then upsample with detail guide
+        if self.fast_mode and (h > 720 or w > 1280):
+            # For 1080p+ videos in fast mode: downsample untiled to maintain fast throughput
             sh, sw = (h // 2 // 2) * 2, (w // 2 // 2) * 2
             small = cv2.resize(frame_bgr, (sw, sh), interpolation=cv2.INTER_AREA)
             rgb_s = cv2.cvtColor(small, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
@@ -197,6 +197,20 @@ class NeuralDenoiseStage:
             out_s = out_tensor.squeeze(0).clamp(0.0, 1.0).permute(1, 2, 0).float().cpu().numpy()
             out_s_bgr = cv2.cvtColor((out_s * 255.0).round().astype(np.uint8), cv2.COLOR_RGB2BGR)
             denoised_bgr = cv2.resize(out_s_bgr, (w, h), interpolation=cv2.INTER_LANCZOS4)
+        elif self.fast_mode:
+            # For <= 720p (e.g. 480p/720p dashcam footage): run native 1x resolution padded to 32
+            # Eliminates severe downsampling blur while running faster on modern GPUs
+            pad_h = (32 - (h % 32)) % 32
+            pad_w = (32 - (w % 32)) % 32
+            padded = cv2.copyMakeBorder(frame_bgr, 0, pad_h, 0, pad_w, cv2.BORDER_REFLECT) if (pad_h > 0 or pad_w > 0) else frame_bgr
+            rgb_pad = cv2.cvtColor(padded, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+            t_in = torch.from_numpy(rgb_pad).permute(2, 0, 1).unsqueeze(0).to(self.device)
+            if self.fp16 and self.device.type == 'cuda':
+                t_in = t_in.half()
+            with torch.inference_mode():
+                out_tensor = self.model(t_in)
+            out_np = (out_tensor.squeeze(0).clamp(0.0, 1.0).permute(1, 2, 0).float().cpu().numpy() * 255.0).round().astype(np.uint8)
+            denoised_bgr = cv2.cvtColor(out_np[:h, :w], cv2.COLOR_RGB2BGR)
         else:
             rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
             tensor = torch.from_numpy(rgb).permute(2, 0, 1).unsqueeze(0).to(self.device)
@@ -217,14 +231,24 @@ class NeuralDenoiseStage:
             denoised_bgr = (out_np * 255.0).round().astype(np.uint8)
             denoised_bgr = cv2.cvtColor(denoised_bgr, cv2.COLOR_RGB2BGR)
 
-        # Texture and plastic-smoothing protection:
-        # Retain 15% of original high-frequency texture (trees, foliage, road asphalt grain)
+        # Micro-contrast and edge sharpness restoration:
+        # Prevents waxy/plastic look by restoring structural edges (license plates, headlights, contours)
+        lab = cv2.cvtColor(denoised_bgr, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+        l_float = l.astype(np.float32)
+        l_blur = cv2.GaussianBlur(l_float, (0, 0), sigmaX=1.2)
+        detail = l_float - l_blur
+        edge_mask = np.clip(np.abs(detail) / 10.0, 0.0, 1.0)
+        l_sharp = np.clip(l_float + 0.35 * detail * edge_mask, 0, 255).astype(np.uint8)
+        denoised_bgr = cv2.cvtColor(cv2.merge([l_sharp, a, b]), cv2.COLOR_LAB2BGR)
+
+        # Retain 10% of raw organic texture
         if denoised_bgr.shape != frame_bgr.shape:
             denoised_bgr = cv2.resize(denoised_bgr, (frame_bgr.shape[1], frame_bgr.shape[0]), interpolation=cv2.INTER_LINEAR)
         if denoised_bgr.dtype != frame_bgr.dtype:
             denoised_bgr = denoised_bgr.astype(frame_bgr.dtype)
 
-        denoised_bgr = cv2.addWeighted(denoised_bgr, 0.85, frame_bgr, 0.15, 0)
+        denoised_bgr = cv2.addWeighted(denoised_bgr, 0.90, frame_bgr, 0.10, 0)
 
         if strength < 1.0:
             return cv2.addWeighted(denoised_bgr, strength, frame_bgr, 1.0 - strength, 0)
@@ -350,7 +374,7 @@ class TemporalSmoothingStage:
     """
     def __init__(
         self,
-        ema_alpha: float = 0.20,
+        ema_alpha: float = 0.15,
         motion_compensated: bool = True,
         flow_scale: float = 0.5
     ):
@@ -399,9 +423,12 @@ class TemporalSmoothingStage:
 
             # Photometric error mask: avoid ghosting in disoccluded or rapid-motion zones
             photometric_err = np.mean(np.abs(frame_bgr.astype(np.float32) - warped_prev.astype(np.float32)), axis=2)
-            valid_mask = np.clip((28.0 - photometric_err) / 28.0, 0.0, 1.0)[:, :, None]
+            valid_mask = np.clip((24.0 - photometric_err) / 24.0, 0.0, 1.0)[:, :, None]
 
-            alpha = (self.ema_alpha * strength) * valid_mask
+            # Glare & specular light guard: prevent ghosting/motion streaks on headlights and streetlights
+            glare_mask = (curr_gray > 190)[:, :, None].astype(np.float32)
+            alpha = (self.ema_alpha * strength) * valid_mask * (1.0 - 0.85 * glare_mask)
+
             out_f = (1.0 - alpha) * frame_bgr.astype(np.float32) + alpha * warped_prev.astype(np.float32)
             out_bgr = np.clip(out_f, 0, 255).astype(np.uint8)
         else:

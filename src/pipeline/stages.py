@@ -97,19 +97,31 @@ class LowLightStage:
             self._model_fp16_checked = True
 
         with torch.inference_mode():
-            enh_t, _ = self.model(t_rgb)
+            # 1. Shadow Chroma Denoising (ISP standard):
+            # When raw sensor shadows have dark current or IR bias (e.g. Red >> Blue/Green in pitch black pixels),
+            # pull near-black pixels towards achromatic neutral before Zero-DCE curve boost.
+            y_in = 0.299 * t_rgb[:, 0:1] + 0.587 * t_rgb[:, 1:2] + 0.114 * t_rgb[:, 2:3]
+            shadow_chroma_weight = torch.clamp((y_in * 255.0 - 6.0) / 30.0, 0.0, 1.0)
+            t_rgb_pre = y_in + (t_rgb - y_in) * shadow_chroma_weight
 
-            # 1. Gray-World chromatic balance on GPU: prevents blue/purple cast across sky and road
-            t_gray = (0.299 * t_rgb[:, 0] + 0.587 * t_rgb[:, 1] + 0.114 * t_rgb[:, 2]) * 255.0
+            enh_t, _ = self.model(t_rgb_pre)
+
+            # Post-neutralize any residual shadow chromatic runaway
+            y_enh = 0.299 * enh_t[:, 0:1] + 0.587 * enh_t[:, 1:2] + 0.114 * enh_t[:, 2:3]
+            shadow_chroma_weight_post = torch.clamp((y_enh * 255.0 - 15.0) / 45.0, 0.35, 1.0)
+            enh_t = y_enh + (enh_t - y_enh) * shadow_chroma_weight_post
+
+            # 2. Gray-World chromatic balance on GPU: prevents color casts across sky and road
+            t_gray = y_in.squeeze(1) * 255.0
             mask = (t_gray > 15.0) & (t_gray < 220.0)
             if mask.sum() > 100:
                 r_m = enh_t[:, 0][mask].mean()
                 g_m = enh_t[:, 1][mask].mean()
                 b_m = enh_t[:, 2][mask].mean()
                 avg_m = (r_m + g_m + b_m) * (1.0 / 3.0)
-                kr = torch.clamp(avg_m / (r_m + 1e-5), 0.90, 1.10)
-                kg = torch.clamp(avg_m / (g_m + 1e-5), 0.90, 1.10)
-                kb = torch.clamp(avg_m / (b_m + 1e-5), 0.90, 1.10)
+                kr = torch.clamp(avg_m / (r_m + 1e-5), 0.75, 1.25)
+                kg = torch.clamp(avg_m / (g_m + 1e-5), 0.75, 1.25)
+                kb = torch.clamp(avg_m / (b_m + 1e-5), 0.75, 1.25)
                 enh_t = torch.cat([enh_t[:, 0:1] * kr, enh_t[:, 1:2] * kg, enh_t[:, 2:3] * kb], dim=1)
 
             # 2. Adaptive Black-Level Preservation & Highlight Knee Compression on GPU

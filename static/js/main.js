@@ -347,85 +347,83 @@ function cancelProcessing(jobId) {
 
 function initResultsPage(jobId) {
     activeJobId = jobId;
-    setupViewPlayers();
+    origPlayer = document.getElementById("player-original");
+    enhPlayer = document.getElementById("player-enhanced");
+
+    initSyncPlayback();
     initSplitSlider();
     initLoupe();
     setupKeyboardShortcuts();
     fetchMetrics(jobId);
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("mode") === "side") {
+        switchViewMode("side");
+    }
 }
 
-function setupViewPlayers() {
-    if (currentViewMode === "split") {
-        origPlayer = document.getElementById("split-original-video");
-        enhPlayer = document.getElementById("split-enhanced-video");
-    } else {
-        origPlayer = document.getElementById("player-original");
-        enhPlayer = document.getElementById("player-enhanced");
-    }
+function initSyncPlayback() {
+    if (!enhPlayer || !origPlayer) return;
 
     const scrub = document.getElementById("sync-scrub");
+    const cur = document.getElementById("time-current");
+    const dur = document.getElementById("time-duration");
 
-    if (enhPlayer) {
-        enhPlayer.addEventListener("timeupdate", () => {
-            if (!scrub) return;
-            const progress = (enhPlayer.currentTime / enhPlayer.duration) * 100;
-            if (!isNaN(progress)) {
-                scrub.value = progress;
-                const cur = document.getElementById("time-current");
-                if (cur) cur.innerText = formatTimeMs(enhPlayer.currentTime);
-            }
-            if (origPlayer && Math.abs(origPlayer.currentTime - enhPlayer.currentTime) > 0.08) {
-                origPlayer.currentTime = enhPlayer.currentTime;
-            }
-        });
+    enhPlayer.addEventListener("loadedmetadata", () => {
+        if (dur) dur.innerText = formatTimeMs(enhPlayer.duration);
+    });
 
-        enhPlayer.addEventListener("loadedmetadata", () => {
-            const dur = document.getElementById("time-duration");
-            if (dur) dur.innerText = formatTimeMs(enhPlayer.duration);
-        });
-
-        if (scrub) {
-            scrub.addEventListener("input", (e) => {
-                const targetTime = (e.target.value / 100) * enhPlayer.duration;
-                if (!isNaN(targetTime)) {
-                    if (origPlayer) origPlayer.currentTime = targetTime;
-                    enhPlayer.currentTime = targetTime;
-                }
-            });
+    enhPlayer.addEventListener("timeupdate", () => {
+        if (!scrub) return;
+        const progress = (enhPlayer.currentTime / enhPlayer.duration) * 100;
+        if (!isNaN(progress)) {
+            scrub.value = progress;
+            if (cur) cur.innerText = formatTimeMs(enhPlayer.currentTime);
         }
+        if (origPlayer && Math.abs(origPlayer.currentTime - enhPlayer.currentTime) > 0.05) {
+            origPlayer.currentTime = enhPlayer.currentTime;
+        }
+    });
+
+    if (scrub) {
+        scrub.addEventListener("input", (e) => {
+            const targetTime = (e.target.value / 100) * enhPlayer.duration;
+            if (!isNaN(targetTime)) {
+                if (origPlayer) origPlayer.currentTime = targetTime;
+                enhPlayer.currentTime = targetTime;
+            }
+        });
     }
 }
 
 function toggleSyncPlay() {
-    if (!enhPlayer) return;
+    if (!enhPlayer || !origPlayer) return;
     const playLabel = document.getElementById("label-play");
 
     if (isPlaying) {
-        if (origPlayer) origPlayer.pause();
+        origPlayer.pause();
         enhPlayer.pause();
         isPlaying = false;
         if (playLabel) playLabel.innerHTML = "&#9658; Play";
     } else {
-        if (origPlayer) {
-            origPlayer.currentTime = enhPlayer.currentTime;
-            origPlayer.play();
-        }
-        enhPlayer.play();
-        isPlaying = true;
-        if (playLabel) playLabel.innerHTML = "&#10074;&#10074; Pause";
+        origPlayer.currentTime = enhPlayer.currentTime;
+        const p1 = origPlayer.play().catch(e => console.warn("Original video playback notice:", e));
+        const p2 = enhPlayer.play().catch(e => console.warn("Enhanced video playback notice:", e));
+        Promise.all([p1, p2]).then(() => {
+            isPlaying = true;
+            if (playLabel) playLabel.innerHTML = "&#10074;&#10074; Pause";
+        });
     }
 }
 
 function stepFrame(deltaFrames) {
-    if (!enhPlayer) return;
+    if (!enhPlayer || !origPlayer) return;
     const frameDuration = 1.0 / 30.0;
     const target = Math.max(0, Math.min(enhPlayer.duration, enhPlayer.currentTime + (deltaFrames * frameDuration)));
 
-    if (origPlayer) {
-        origPlayer.pause();
-        origPlayer.currentTime = target;
-    }
+    origPlayer.pause();
     enhPlayer.pause();
+    origPlayer.currentTime = target;
     enhPlayer.currentTime = target;
     isPlaying = false;
     const playLabel = document.getElementById("label-play");
@@ -448,25 +446,22 @@ function formatTimeMs(seconds) {
 
 // Split Slider Controller
 function initSplitSlider() {
-    const box = document.getElementById("container-split-slider");
-    const clip = document.getElementById("split-slider-clip");
-    const handle = document.getElementById("split-slider-handle");
-
-    if (!box || !clip || !handle) return;
+    const canvas = document.getElementById("viewport-canvas");
+    if (!canvas) return;
 
     let isDragging = false;
 
-    function setSliderPosition(x) {
-        const rect = box.getBoundingClientRect();
-        let posX = x - rect.left;
+    function setSliderPosition(clientX) {
+        if (currentViewMode !== "split") return;
+        const rect = canvas.getBoundingClientRect();
+        let posX = clientX - rect.left;
         posX = Math.max(0, Math.min(posX, rect.width));
         const percent = (posX / rect.width) * 100;
-
-        clip.style.width = `${percent}%`;
-        handle.style.left = `${percent}%`;
+        canvas.style.setProperty("--split-pos", `${percent}%`);
     }
 
-    box.addEventListener("mousedown", (e) => {
+    canvas.addEventListener("mousedown", (e) => {
+        if (currentViewMode !== "split") return;
         isDragging = true;
         setSliderPosition(e.clientX);
     });
@@ -480,7 +475,8 @@ function initSplitSlider() {
         isDragging = false;
     });
 
-    box.addEventListener("touchstart", (e) => {
+    canvas.addEventListener("touchstart", (e) => {
+        if (currentViewMode !== "split") return;
         isDragging = true;
         setSliderPosition(e.touches[0].clientX);
     });
@@ -497,36 +493,22 @@ function initSplitSlider() {
 
 function switchViewMode(mode) {
     currentViewMode = mode;
-    const sideCont = document.getElementById("container-side-by-side");
-    const splitCont = document.getElementById("container-split-slider");
+    const canvas = document.getElementById("viewport-canvas");
     const sideBtn = document.getElementById("view-mode-side");
     const splitBtn = document.getElementById("view-mode-split");
 
-    const wasPlaying = isPlaying;
-    let curTime = 0;
-    if (enhPlayer) {
-        curTime = enhPlayer.currentTime;
-        enhPlayer.pause();
-    }
-    if (origPlayer) origPlayer.pause();
+    if (!canvas) return;
 
     if (mode === "side") {
-        if (sideCont) sideCont.classList.remove("hidden");
-        if (splitCont) splitCont.classList.add("hidden");
+        canvas.classList.remove("mode-split");
+        canvas.classList.add("mode-side");
         if (sideBtn) sideBtn.classList.add("active");
         if (splitBtn) splitBtn.classList.remove("active");
     } else {
-        if (sideCont) sideCont.classList.add("hidden");
-        if (splitCont) splitCont.classList.remove("hidden");
+        canvas.classList.remove("mode-side");
+        canvas.classList.add("mode-split");
         if (splitBtn) splitBtn.classList.add("active");
         if (sideBtn) sideBtn.classList.remove("active");
-    }
-
-    setupViewPlayers();
-    if (enhPlayer) enhPlayer.currentTime = curTime;
-    if (origPlayer) origPlayer.currentTime = curTime;
-    if (wasPlaying) {
-        toggleSyncPlay();
     }
 }
 
@@ -551,22 +533,39 @@ function initLoupe() {
         lens.style.left = `${mouseX - 80}px`;
         lens.style.top = `${mouseY - 80}px`;
 
-        const activeVid = enhPlayer || document.getElementById("split-enhanced-video");
+        let activeVid = enhPlayer;
+        let relX = mouseX;
+        let vidWidth = rect.width;
+
+        if (currentViewMode === "split") {
+            const splitPosPercent = parseFloat(getComputedStyle(box).getPropertyValue("--split-pos")) || 50;
+            const splitX = (splitPosPercent / 100) * rect.width;
+            activeVid = (mouseX < splitX) ? origPlayer : enhPlayer;
+        } else {
+            vidWidth = rect.width / 2;
+            if (mouseX < vidWidth) {
+                activeVid = origPlayer;
+                relX = mouseX;
+            } else {
+                activeVid = enhPlayer;
+                relX = mouseX - vidWidth;
+            }
+        }
+
         if (!activeVid || activeVid.videoWidth === 0) return;
 
-        // Render 3x zoom from active video
-        const scaleX = activeVid.videoWidth / rect.width;
+        const scaleX = activeVid.videoWidth / vidWidth;
         const scaleY = activeVid.videoHeight / rect.height;
 
-        const srcW = 160 / 3 * scaleX;
-        const srcH = 160 / 3 * scaleY;
-        const srcX = (mouseX * scaleX) - (srcW / 2);
+        const srcW = (160 / 3) * scaleX;
+        const srcH = (160 / 3) * scaleY;
+        const srcX = (relX * scaleX) - (srcW / 2);
         const srcY = (mouseY * scaleY) - (srcH / 2);
 
         ctx.clearRect(0, 0, 160, 160);
         try {
             ctx.drawImage(activeVid, srcX, srcY, srcW, srcH, 0, 0, 160, 160);
-        } catch(e) {}
+        } catch(err) {}
     });
 
     box.addEventListener("mouseleave", () => {

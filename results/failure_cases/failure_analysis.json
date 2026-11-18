@@ -1,0 +1,53 @@
+{
+  "case1_oncoming_headlight_glare": {
+    "clip": "real_night_dashcam_01.mp4",
+    "frame_index": 12,
+    "region": [
+      288,
+      468,
+      320,
+      704
+    ],
+    "diagnosis": "Specular saturation (Y=255) across sensor photodiodes produces severe glare bloom without knee compression.",
+    "unmitigated_bloom_area": 12204,
+    "mitigated_bloom_area": 10748,
+    "files": [
+      "case1_headlight_input.png",
+      "case1_headlight_unmitigated.png",
+      "case1_headlight_mitigated.png"
+    ]
+  },
+  "case2_dark_sky_blue_gray_haze": {
+    "clip": "real_night_dashcam_01.mp4",
+    "frame_index": 12,
+    "region": [
+      0,
+      251,
+      768,
+      1280
+    ],
+    "diagnosis": "Uniform dark night sky (Y<15) amplified into noisy gray-blue haze under naive unconstrained curve expansion.",
+    "unmitigated_sky_mean_lum": 122.83,
+    "mitigated_sky_mean_lum": 65.97,
+    "files": [
+      "case2_sky_input.png",
+      "case2_sky_unmitigated.png",
+      "case2_sky_mitigated.png"
+    ]
+  },
+  "case3_distant_plate_resolution_limit": {
+    "clip": "real_night_dashcam_04.mp4",
+    "frame_index": 25,
+    "region": [
+      396,
+      503,
+      576,
+      742
+    ],
+    "diagnosis": "Beyond a critical distance (>25m) where plate height is <10 pixels, super-resolution recovers contrast and vehicle edges, but cannot synthesize missing alphanumeric characters without OCR prior.",
+    "files": [
+      "case3_distant_plate_input.png",
+      "case3_distant_plate_enhanced.png"
+    ]
+  }
+}

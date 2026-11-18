@@ -19,7 +19,7 @@ from config import (
     UPLOAD_DIR, OUTPUT_DIR, ALLOWED_EXTENSIONS,
     MAX_CONTENT_LENGTH, SECRET_KEY, PORT, HOST
 )
-from src.utils import generate_job_id, sanitize_filename, is_allowed_file
+from src.utils import generate_job_id, sanitize_filename, is_allowed_file, ensure_web_compatible_video
 from src.metadata import extract_video_metadata
 from src.video_processor import ProcessingManager, JobState
 
@@ -393,7 +393,8 @@ def stream_original_video(job_id):
     job = processing_manager.get_job(job_id)
     if not job or not os.path.exists(job.input_path):
         abort(404)
-    return send_file(job.input_path, mimetype="video/mp4", conditional=True)
+    stream_path = ensure_web_compatible_video(job.input_path)
+    return send_file(stream_path, mimetype="video/mp4", conditional=True)
 
 @app.route("/media/enhanced/<job_id>")
 def stream_enhanced_video(job_id):

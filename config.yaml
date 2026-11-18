@@ -1,0 +1,92 @@
+# DashClarity AI - Configuration File
+# Controls active modular stages, presets, hardware policies, and output options.
+
+hardware:
+  device: "cuda"          # cuda or cpu
+  fp16: true              # Half-precision inference where supported
+  tile_size: 512          # Square spatial tile size for optimal RTX 4060 throughput
+  tile_pad: 16            # Spatial overlap between adjacent tiles
+  max_vram_gb: 6.0        # VRAM ceiling to maintain headroom on 8 GB GPU
+
+models:
+  low_light: "zero_dce_plus"         # zero_dce_plus, zero_dce, or stcd_lowlight
+  denoiser: "scunet"                 # scunet (neural) or bilateral (classical)
+  super_res: "realesr_general_x4v3"  # realesr_general_x4v3 or realesr_x2plus
+  denoise_strength: 0.85
+  temporal_ema_alpha: 0.20
+  motion_compensated: true           # Farneback dense optical flow warping
+  flow_scale: 0.5                    # Downscaled optical flow for fast execution
+
+super_resolution_policy:
+  restore_at_original_res: false     # When true, downscales back to input dimensions (detail restoration at 1x)
+  auto_1080p_downscale: true         # Automatically restores 1080p+ to original resolution instead of 4K
+  anti_ringing_blend: 0.22           # Blends 22% Lanczos to prevent GAN halo/ringing artifacts
+
+quality_guard:
+  min_mad_threshold: 0.05            # Minimum Mean Absolute Difference between input and output
+  raise_on_zero_diff: true           # Fail loudly if output is functionally identical to input
+
+presets:
+  fast:
+    description: "Ultra-fast preview mode: Zero-DCE++ with light classical denoise (Target: >=20 FPS)"
+    enable_neural_denoise: false
+    enable_classical_denoise: true
+    enable_low_light: true
+    enable_super_res: false
+    enable_temporal: false
+    strength: 1.0
+
+  balanced:
+    description: "Balanced production mode: Fast neural denoiser + Zero-DCE++ + Farneback temporal consistency (Target: >=3 FPS)"
+    enable_neural_denoise: true
+    neural_denoise_fast_mode: true
+    enable_low_light: true
+    enable_super_res: false
+    enable_temporal: true
+    temporal_flow_scale: 0.33
+    strength: 1.0
+
+  quality:
+    description: "Maximum forensic clarity: Full-resolution SCUNet + Zero-DCE++ + Real-ESRGAN + Farneback Temporal"
+    enable_neural_denoise: true
+    neural_denoise_fast_mode: false
+    enable_low_light: true
+    enable_super_res: true
+    enable_temporal: true
+    strength: 1.0
+
+  full:
+    description: "Alias for quality preset"
+    enable_neural_denoise: true
+    neural_denoise_fast_mode: false
+    enable_low_light: true
+    enable_super_res: true
+    enable_temporal: true
+    strength: 1.0
+
+  stcd_comparison:
+    description: "Ablation preset running IJCAI 2025 STCD spatial-temporal model with real neural output"
+    enable_neural_denoise: false
+    enable_low_light: true
+    low_light_model: "stcd_lowlight"
+    enable_super_res: false
+    enable_temporal: false
+    strength: 1.0
+
+  hybrid_scunet_stcd:
+    description: "Hybrid research preset: SCUNet neural denoiser -> STCD spatial-temporal decomposition"
+    enable_neural_denoise: true
+    neural_denoise_fast_mode: false
+    enable_low_light: true
+    low_light_model: "stcd_lowlight"
+    enable_super_res: false
+    enable_temporal: false
+    strength: 1.0
+
+  classical_baseline:
+    description: "Classical baseline for ablation: Bilateral filter + Zero-DCE++ (no neural denoiser / SR)"
+    enable_classical_denoise: true
+    enable_low_light: true
+    enable_super_res: false
+    enable_temporal: false
+    strength: 1.0

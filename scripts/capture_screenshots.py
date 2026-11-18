@@ -21,9 +21,10 @@ EDGE_BIN = r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
 SHOTS_DIR = BASE_DIR / "docs" / "screenshots"
 SHOTS_DIR.mkdir(parents=True, exist_ok=True)
 
-# Find an existing completed job id
-jobs = processing_manager.list_history()
-sample_job_id = jobs[0]["job_id"] if jobs else "test_ui_dummy_job"
+sample_job_id = "87b5a0d729f6"
+if not processing_manager.get_job(sample_job_id):
+    jobs = processing_manager.list_history()
+    sample_job_id = jobs[0]["job_id"] if jobs else "test_ui_dummy_job"
 
 # Seed a realistic active processing job so processing.html can be screenshotted live
 from src.video_processor import JobState
@@ -50,6 +51,7 @@ screens = [
     ("desktop_02_upload.png", "http://127.0.0.1:5000/upload", 1366, 768),
     ("desktop_03_processing.png", "http://127.0.0.1:5000/processing/demo_processing", 1366, 768),
     ("desktop_04_results.png", f"http://127.0.0.1:5000/results/{sample_job_id}", 1366, 768),
+    ("desktop_04b_results_side.png", f"http://127.0.0.1:5000/results/{sample_job_id}?mode=side", 1366, 768),
     ("desktop_05_history.png", "http://127.0.0.1:5000/history", 1366, 768),
     ("desktop_06_about.png", "http://127.0.0.1:5000/about", 1366, 768),
     ("mobile_01_results.png", f"http://127.0.0.1:5000/results/{sample_job_id}", 390, 844),

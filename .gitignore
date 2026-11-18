@@ -4,27 +4,53 @@ env/
 venv/
 ENV/
 
-# Python Cache
+# Python Cache & Bytecode
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .pytest_cache/
 
+# Model Weights (Auto-downloaded via WeightsManager & scripts/download_weights.py)
+weights/**/*.pth
+weights/*.pth
+!weights/**/.gitkeep
+!weights/manifest.json
+
 # Runtime and Temporary Directories
 input_videos/*
 !input_videos/.gitkeep
 !input_videos/sample_night_dashcam.mp4
+!input_videos/real/
+!input_videos/clean_sources/
 output_videos/*
 !output_videos/.gitkeep
 logs/*
 !logs/.gitkeep
+tmp/
+.web_cache/
+input_videos/.web_cache/
+data/*
+!data/.gitkeep
+
+# Course Materials & Archive Zips
+Handouts*
+*.zip
+
+# Test artifacts
+tests/*.png
+tests/*.mp4
+tests/frame_eval/
+tests/debug_*.png
+tests/exp_*.png
+tests/user_*.png
+tests/night_*.png
 
 # OS generated files
 .DS_Store
 Thumbs.db
 desktop.ini
 
-# Environment variables
+# Environment variables & Local configuration
 .env
-
+.cache/

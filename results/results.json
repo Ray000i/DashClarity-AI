@@ -1,0 +1,1247 @@
+{
+  "metadata": {
+    "timestamp": "2026-11-15 15:51:38",
+    "git_commit": "530d213fdd4d96f95c83973253374cff569d3016",
+    "device": "NVIDIA GeForce RTX 4060 Laptop GPU",
+    "pytorch_version": "2.5.1+cu121",
+    "dataset": "Roadscapes Video Dataset (CC-BY-4.0)"
+  },
+  "profiling": {
+    "stage_ms_720p": {
+      "gpu_tensor_upload": 0.4,
+      "zero_dce_plus_fp16": 35.73,
+      "classical_bilateral": 2.4,
+      "scunet_neural_fast": 156.38,
+      "scunet_neural_full": 995.35,
+      "realesrgan_sr_512": 588.63,
+      "farneback_flow_033": 91.56,
+      "ffmpeg_pipe_io": 3.2
+    },
+    "presets": {
+      "720p": {
+        "fast": {
+          "fps": 20.2,
+          "ms_per_frame": 49.5,
+          "peak_vram_mb": 729.1
+        },
+        "balanced": {
+          "fps": 3.5,
+          "ms_per_frame": 281.7,
+          "peak_vram_mb": 729.0
+        },
+        "quality": {
+          "fps": 0.6,
+          "ms_per_frame": 1639.8,
+          "peak_vram_mb": 734.3
+        }
+      },
+      "1080p": {
+        "fast": {
+          "fps": 11.7,
+          "ms_per_frame": 85.6,
+          "peak_vram_mb": 1449.5
+        },
+        "balanced": {
+          "fps": 1.5,
+          "ms_per_frame": 661.5,
+          "peak_vram_mb": 1449.5
+        },
+        "quality": {
+          "fps": 0.3,
+          "ms_per_frame": 3953.5,
+          "peak_vram_mb": 1449.5
+        }
+      }
+    }
+  },
+  "synthetic_ablation": {
+    "realistic": {
+      "summary": {
+        "Degraded Input": {
+          "psnr_mean": 11.81,
+          "psnr_std": 0.41,
+          "ssim_mean": 0.3709,
+          "ssim_std": 0.0171,
+          "lpips_mean": 0.5924,
+          "lpips_std": 0.0447,
+          "mean_lum": 55.91,
+          "hf_res_std": 20.19,
+          "delta_psnr": -5.57,
+          "delta_psnr_ci95": [
+            -5.75,
+            -5.39
+          ],
+          "delta_ssim": -0.0715,
+          "delta_ssim_ci95": [
+            -0.084,
+            -0.0592
+          ],
+          "delta_lpips": -0.0233,
+          "delta_lpips_ci95": [
+            -0.03,
+            -0.017
+          ]
+        },
+        "Bicubic Baseline": {
+          "psnr_mean": 11.85,
+          "psnr_std": 0.41,
+          "ssim_mean": 0.5126,
+          "ssim_std": 0.0262,
+          "lpips_mean": 0.4776,
+          "lpips_std": 0.0266,
+          "mean_lum": 56.03,
+          "hf_res_std": 8.29,
+          "delta_psnr": -5.53,
+          "delta_psnr_ci95": [
+            -5.71,
+            -5.35
+          ],
+          "delta_ssim": 0.0702,
+          "delta_ssim_ci95": [
+            0.0602,
+            0.0796
+          ],
+          "delta_lpips": -0.1381,
+          "delta_lpips_ci95": [
+            -0.1495,
+            -0.1266
+          ]
+        },
+        "Classical (Bilateral + DCE)": {
+          "psnr_mean": 18.07,
+          "psnr_std": 1.11,
+          "ssim_mean": 0.791,
+          "ssim_std": 0.027,
+          "lpips_mean": 0.3172,
+          "lpips_std": 0.0418,
+          "mean_lum": 97.1,
+          "hf_res_std": 13.42,
+          "delta_psnr": 0.69,
+          "delta_psnr_ci95": [
+            0.59,
+            0.79
+          ],
+          "delta_ssim": 0.3486,
+          "delta_ssim_ci95": [
+            0.3438,
+            0.3532
+          ],
+          "delta_lpips": -0.2985,
+          "delta_lpips_ci95": [
+            -0.3029,
+            -0.294
+          ]
+        },
+        "STCD (Spatial-Temporal Consistent Decomposition)": {
+          "psnr_mean": 15.82,
+          "psnr_std": 1.23,
+          "ssim_mean": 0.7802,
+          "ssim_std": 0.0156,
+          "lpips_mean": 0.2553,
+          "lpips_std": 0.0445,
+          "mean_lum": 149.78,
+          "hf_res_std": 10.12,
+          "delta_psnr": -1.56,
+          "delta_psnr_ci95": [
+            -2.07,
+            -1.04
+          ],
+          "delta_ssim": 0.3378,
+          "delta_ssim_ci95": [
+            0.3271,
+            0.3483
+          ],
+          "delta_lpips": -0.3604,
+          "delta_lpips_ci95": [
+            -0.3731,
+            -0.3467
+          ]
+        },
+        "Zero-DCE++ Only": {
+          "psnr_mean": 17.38,
+          "psnr_std": 0.75,
+          "ssim_mean": 0.4424,
+          "ssim_std": 0.0416,
+          "lpips_mean": 0.6157,
+          "lpips_std": 0.0563,
+          "mean_lum": 96.32,
+          "hf_res_std": 40.03,
+          "delta_psnr": 0.0,
+          "delta_psnr_ci95": [
+            0.0,
+            0.0
+          ],
+          "delta_ssim": 0.0,
+          "delta_ssim_ci95": [
+            0.0,
+            0.0
+          ],
+          "delta_lpips": 0.0,
+          "delta_lpips_ci95": [
+            0.0,
+            0.0
+          ]
+        },
+        "Order B: ZeroDCE -> SCUNet": {
+          "psnr_mean": 18.11,
+          "psnr_std": 1.24,
+          "ssim_mean": 0.8915,
+          "ssim_std": 0.0142,
+          "lpips_mean": 0.1469,
+          "lpips_std": 0.0273,
+          "mean_lum": 96.14,
+          "hf_res_std": 8.09,
+          "delta_psnr": 0.72,
+          "delta_psnr_ci95": [
+            0.59,
+            0.87
+          ],
+          "delta_ssim": 0.4491,
+          "delta_ssim_ci95": [
+            0.4405,
+            0.4573
+          ],
+          "delta_lpips": -0.4688,
+          "delta_lpips_ci95": [
+            -0.4776,
+            -0.4596
+          ]
+        },
+        "Order A: SCUNet -> ZeroDCE (Proposed)": {
+          "psnr_mean": 18.05,
+          "psnr_std": 1.21,
+          "ssim_mean": 0.8588,
+          "ssim_std": 0.0211,
+          "lpips_mean": 0.1682,
+          "lpips_std": 0.0266,
+          "mean_lum": 95.92,
+          "hf_res_std": 8.95,
+          "delta_psnr": 0.67,
+          "delta_psnr_ci95": [
+            0.54,
+            0.8
+          ],
+          "delta_ssim": 0.4164,
+          "delta_ssim_ci95": [
+            0.4042,
+            0.4275
+          ],
+          "delta_lpips": -0.4475,
+          "delta_lpips_ci95": [
+            -0.4562,
+            -0.4383
+          ]
+        },
+        "Hybrid: SCUNet -> STCD": {
+          "psnr_mean": 16.05,
+          "psnr_std": 1.27,
+          "ssim_mean": 0.793,
+          "ssim_std": 0.0175,
+          "lpips_mean": 0.2275,
+          "lpips_std": 0.0374,
+          "mean_lum": 146.29,
+          "hf_res_std": 9.86,
+          "delta_psnr": -1.34,
+          "delta_psnr_ci95": [
+            -1.86,
+            -0.82
+          ],
+          "delta_ssim": 0.3506,
+          "delta_ssim_ci95": [
+            0.3359,
+            0.3648
+          ],
+          "delta_lpips": -0.3883,
+          "delta_lpips_ci95": [
+            -0.4028,
+            -0.3731
+          ]
+        },
+        "Hybrid: STCD -> SCUNet": {
+          "psnr_mean": 15.8,
+          "psnr_std": 1.23,
+          "ssim_mean": 0.7985,
+          "ssim_std": 0.016,
+          "lpips_mean": 0.2361,
+          "lpips_std": 0.0491,
+          "mean_lum": 149.92,
+          "hf_res_std": 9.24,
+          "delta_psnr": -1.59,
+          "delta_psnr_ci95": [
+            -2.09,
+            -1.06
+          ],
+          "delta_ssim": 0.3561,
+          "delta_ssim_ci95": [
+            0.3443,
+            0.3676
+          ],
+          "delta_lpips": -0.3797,
+          "delta_lpips_ci95": [
+            -0.3941,
+            -0.3639
+          ]
+        },
+        "+ Super-Resolution (Real-ESRGAN)": {
+          "psnr_mean": 17.88,
+          "psnr_std": 1.04,
+          "ssim_mean": 0.8745,
+          "ssim_std": 0.027,
+          "lpips_mean": 0.1767,
+          "lpips_std": 0.009,
+          "mean_lum": 95.84,
+          "hf_res_std": 19.02,
+          "delta_psnr": 0.49,
+          "delta_psnr_ci95": [
+            0.41,
+            0.57
+          ],
+          "delta_ssim": 0.4322,
+          "delta_ssim_ci95": [
+            0.4155,
+            0.4475
+          ],
+          "delta_lpips": -0.4391,
+          "delta_lpips_ci95": [
+            -0.4529,
+            -0.4241
+          ]
+        },
+        "Full Proposed Pipeline (+ Temporal)": {
+          "psnr_mean": 17.81,
+          "psnr_std": 1.09,
+          "ssim_mean": 0.8745,
+          "ssim_std": 0.0284,
+          "lpips_mean": 0.1765,
+          "lpips_std": 0.0086,
+          "mean_lum": 95.36,
+          "hf_res_std": 18.78,
+          "delta_psnr": 0.43,
+          "delta_psnr_ci95": [
+            0.33,
+            0.52
+          ],
+          "delta_ssim": 0.4321,
+          "delta_ssim_ci95": [
+            0.4149,
+            0.4479
+          ],
+          "delta_lpips": -0.4393,
+          "delta_lpips_ci95": [
+            -0.4532,
+            -0.4241
+          ]
+        },
+        "Preset: Fast": {
+          "psnr_mean": 18.04,
+          "psnr_std": 1.1,
+          "ssim_mean": 0.7542,
+          "ssim_std": 0.0277,
+          "lpips_mean": 0.3409,
+          "lpips_std": 0.0398,
+          "mean_lum": 97.04,
+          "hf_res_std": 15.42,
+          "delta_psnr": 0.66,
+          "delta_psnr_ci95": [
+            0.56,
+            0.76
+          ],
+          "delta_ssim": 0.3118,
+          "delta_ssim_ci95": [
+            0.3075,
+            0.3159
+          ],
+          "delta_lpips": -0.2748,
+          "delta_lpips_ci95": [
+            -0.2795,
+            -0.27
+          ]
+        },
+        "Preset: Balanced": {
+          "psnr_mean": 18.02,
+          "psnr_std": 1.21,
+          "ssim_mean": 0.8727,
+          "ssim_std": 0.0182,
+          "lpips_mean": 0.1909,
+          "lpips_std": 0.0203,
+          "mean_lum": 96.17,
+          "hf_res_std": 8.85,
+          "delta_psnr": 0.64,
+          "delta_psnr_ci95": [
+            0.51,
+            0.77
+          ],
+          "delta_ssim": 0.4303,
+          "delta_ssim_ci95": [
+            0.4175,
+            0.4421
+          ],
+          "delta_lpips": -0.4248,
+          "delta_lpips_ci95": [
+            -0.4361,
+            -0.4125
+          ]
+        },
+        "Preset: Quality": {
+          "psnr_mean": 17.81,
+          "psnr_std": 1.09,
+          "ssim_mean": 0.8745,
+          "ssim_std": 0.0284,
+          "lpips_mean": 0.1765,
+          "lpips_std": 0.0086,
+          "mean_lum": 95.36,
+          "hf_res_std": 18.78,
+          "delta_psnr": 0.43,
+          "delta_psnr_ci95": [
+            0.33,
+            0.52
+          ],
+          "delta_ssim": 0.4321,
+          "delta_ssim_ci95": [
+            0.4149,
+            0.4479
+          ],
+          "delta_lpips": -0.4393,
+          "delta_lpips_ci95": [
+            -0.4532,
+            -0.4241
+          ]
+        }
+      },
+      "pairwise_tests": {
+        "order_a_vs_order_b": {
+          "delta_psnr": -0.06,
+          "ci95_psnr": [
+            -0.07,
+            -0.04
+          ],
+          "delta_lpips": 0.0213,
+          "ci95_lpips": [
+            0.0196,
+            0.023
+          ],
+          "statistically_significant": true
+        },
+        "full_vs_stcd": {
+          "delta_psnr": 1.99,
+          "ci95_psnr": [
+            1.38,
+            2.58
+          ],
+          "delta_lpips": -0.0789,
+          "ci95_lpips": [
+            -0.0909,
+            -0.0672
+          ],
+          "statistically_significant": true
+        }
+      }
+    },
+    "extreme": {
+      "summary": {
+        "Degraded Input": {
+          "psnr_mean": 6.42,
+          "psnr_std": 0.64,
+          "ssim_mean": 0.0805,
+          "ssim_std": 0.0077,
+          "lpips_mean": 1.0649,
+          "lpips_std": 0.0334,
+          "mean_lum": 11.49,
+          "hf_res_std": 19.9,
+          "delta_psnr": -3.83,
+          "delta_psnr_ci95": [
+            -3.94,
+            -3.72
+          ],
+          "delta_ssim": -0.0053,
+          "delta_ssim_ci95": [
+            -0.0079,
+            -0.0029
+          ],
+          "delta_lpips": -0.193,
+          "delta_lpips_ci95": [
+            -0.2035,
+            -0.1828
+          ]
+        },
+        "Bicubic Baseline": {
+          "psnr_mean": 6.44,
+          "psnr_std": 0.64,
+          "ssim_mean": 0.1185,
+          "ssim_std": 0.0145,
+          "lpips_mean": 0.9063,
+          "lpips_std": 0.0307,
+          "mean_lum": 11.61,
+          "hf_res_std": 9.95,
+          "delta_psnr": -3.82,
+          "delta_psnr_ci95": [
+            -3.93,
+            -3.71
+          ],
+          "delta_ssim": 0.0327,
+          "delta_ssim_ci95": [
+            0.0288,
+            0.0366
+          ],
+          "delta_lpips": -0.3516,
+          "delta_lpips_ci95": [
+            -0.3623,
+            -0.3402
+          ]
+        },
+        "Classical (Bilateral + DCE)": {
+          "psnr_mean": 11.01,
+          "psnr_std": 0.49,
+          "ssim_mean": 0.2953,
+          "ssim_std": 0.0153,
+          "lpips_mean": 0.8744,
+          "lpips_std": 0.0151,
+          "mean_lum": 54.64,
+          "hf_res_std": 25.32,
+          "delta_psnr": 0.76,
+          "delta_psnr_ci95": [
+            0.75,
+            0.78
+          ],
+          "delta_ssim": 0.2094,
+          "delta_ssim_ci95": [
+            0.2071,
+            0.2117
+          ],
+          "delta_lpips": -0.3835,
+          "delta_lpips_ci95": [
+            -0.3871,
+            -0.3799
+          ]
+        },
+        "STCD (Spatial-Temporal Consistent Decomposition)": {
+          "psnr_mean": 13.88,
+          "psnr_std": 0.73,
+          "ssim_mean": 0.5823,
+          "ssim_std": 0.0547,
+          "lpips_mean": 0.5984,
+          "lpips_std": 0.0344,
+          "mean_lum": 74.64,
+          "hf_res_std": 10.57,
+          "delta_psnr": 3.63,
+          "delta_psnr_ci95": [
+            3.4,
+            3.85
+          ],
+          "delta_ssim": 0.4965,
+          "delta_ssim_ci95": [
+            0.4822,
+            0.5107
+          ],
+          "delta_lpips": -0.6594,
+          "delta_lpips_ci95": [
+            -0.6668,
+            -0.652
+          ]
+        },
+        "Zero-DCE++ Only": {
+          "psnr_mean": 10.25,
+          "psnr_std": 0.46,
+          "ssim_mean": 0.0858,
+          "ssim_std": 0.0092,
+          "lpips_mean": 1.2579,
+          "lpips_std": 0.0209,
+          "mean_lum": 52.6,
+          "hf_res_std": 87.05,
+          "delta_psnr": 0.0,
+          "delta_psnr_ci95": [
+            0.0,
+            0.0
+          ],
+          "delta_ssim": 0.0,
+          "delta_ssim_ci95": [
+            0.0,
+            0.0
+          ],
+          "delta_lpips": 0.0,
+          "delta_lpips_ci95": [
+            0.0,
+            0.0
+          ]
+        },
+        "Order B: ZeroDCE -> SCUNet": {
+          "psnr_mean": 10.28,
+          "psnr_std": 0.34,
+          "ssim_mean": 0.3498,
+          "ssim_std": 0.0381,
+          "lpips_mean": 0.6972,
+          "lpips_std": 0.0396,
+          "mean_lum": 44.43,
+          "hf_res_std": 15.71,
+          "delta_psnr": 0.03,
+          "delta_psnr_ci95": [
+            -0.01,
+            0.07
+          ],
+          "delta_ssim": 0.264,
+          "delta_ssim_ci95": [
+            0.2527,
+            0.2749
+          ],
+          "delta_lpips": -0.5607,
+          "delta_lpips_ci95": [
+            -0.5714,
+            -0.5501
+          ]
+        },
+        "Order A: SCUNet -> ZeroDCE (Proposed)": {
+          "psnr_mean": 10.0,
+          "psnr_std": 0.36,
+          "ssim_mean": 0.2888,
+          "ssim_std": 0.0457,
+          "lpips_mean": 0.8292,
+          "lpips_std": 0.0329,
+          "mean_lum": 42.05,
+          "hf_res_std": 19.17,
+          "delta_psnr": -0.25,
+          "delta_psnr_ci95": [
+            -0.31,
+            -0.19
+          ],
+          "delta_ssim": 0.203,
+          "delta_ssim_ci95": [
+            0.1891,
+            0.2156
+          ],
+          "delta_lpips": -0.4287,
+          "delta_lpips_ci95": [
+            -0.4369,
+            -0.4206
+          ]
+        },
+        "Hybrid: SCUNet -> STCD": {
+          "psnr_mean": 12.08,
+          "psnr_std": 0.65,
+          "ssim_mean": 0.4966,
+          "ssim_std": 0.1135,
+          "lpips_mean": 0.5767,
+          "lpips_std": 0.0437,
+          "mean_lum": 60.14,
+          "hf_res_std": 9.72,
+          "delta_psnr": 1.83,
+          "delta_psnr_ci95": [
+            1.56,
+            2.08
+          ],
+          "delta_ssim": 0.4108,
+          "delta_ssim_ci95": [
+            0.3771,
+            0.4437
+          ],
+          "delta_lpips": -0.6812,
+          "delta_lpips_ci95": [
+            -0.6954,
+            -0.6665
+          ]
+        },
+        "Hybrid: STCD -> SCUNet": {
+          "psnr_mean": 13.78,
+          "psnr_std": 0.79,
+          "ssim_mean": 0.5994,
+          "ssim_std": 0.0659,
+          "lpips_mean": 0.5407,
+          "lpips_std": 0.042,
+          "mean_lum": 73.69,
+          "hf_res_std": 9.91,
+          "delta_psnr": 3.52,
+          "delta_psnr_ci95": [
+            3.27,
+            3.77
+          ],
+          "delta_ssim": 0.5136,
+          "delta_ssim_ci95": [
+            0.4961,
+            0.5309
+          ],
+          "delta_lpips": -0.7172,
+          "delta_lpips_ci95": [
+            -0.7277,
+            -0.7064
+          ]
+        },
+        "+ Super-Resolution (Real-ESRGAN)": {
+          "psnr_mean": 9.91,
+          "psnr_std": 0.35,
+          "ssim_mean": 0.3192,
+          "ssim_std": 0.0616,
+          "lpips_mean": 0.614,
+          "lpips_std": 0.0329,
+          "mean_lum": 40.72,
+          "hf_res_std": 13.65,
+          "delta_psnr": -0.34,
+          "delta_psnr_ci95": [
+            -0.41,
+            -0.27
+          ],
+          "delta_ssim": 0.2334,
+          "delta_ssim_ci95": [
+            0.2146,
+            0.2511
+          ],
+          "delta_lpips": -0.6439,
+          "delta_lpips_ci95": [
+            -0.6545,
+            -0.6327
+          ]
+        },
+        "Full Proposed Pipeline (+ Temporal)": {
+          "psnr_mean": 9.87,
+          "psnr_std": 0.34,
+          "ssim_mean": 0.3134,
+          "ssim_std": 0.0625,
+          "lpips_mean": 0.6039,
+          "lpips_std": 0.0342,
+          "mean_lum": 40.27,
+          "hf_res_std": 13.41,
+          "delta_psnr": -0.39,
+          "delta_psnr_ci95": [
+            -0.46,
+            -0.32
+          ],
+          "delta_ssim": 0.2276,
+          "delta_ssim_ci95": [
+            0.2087,
+            0.2457
+          ],
+          "delta_lpips": -0.654,
+          "delta_lpips_ci95": [
+            -0.6653,
+            -0.6423
+          ]
+        },
+        "Preset: Fast": {
+          "psnr_mean": 10.95,
+          "psnr_std": 0.49,
+          "ssim_mean": 0.2584,
+          "ssim_std": 0.0151,
+          "lpips_mean": 0.9025,
+          "lpips_std": 0.0155,
+          "mean_lum": 54.23,
+          "hf_res_std": 30.35,
+          "delta_psnr": 0.7,
+          "delta_psnr_ci95": [
+            0.69,
+            0.71
+          ],
+          "delta_ssim": 0.1726,
+          "delta_ssim_ci95": [
+            0.1708,
+            0.1744
+          ],
+          "delta_lpips": -0.3554,
+          "delta_lpips_ci95": [
+            -0.3586,
+            -0.3521
+          ]
+        },
+        "Preset: Balanced": {
+          "psnr_mean": 10.14,
+          "psnr_std": 0.28,
+          "ssim_mean": 0.3123,
+          "ssim_std": 0.0506,
+          "lpips_mean": 0.8276,
+          "lpips_std": 0.0323,
+          "mean_lum": 43.16,
+          "hf_res_std": 16.82,
+          "delta_psnr": -0.11,
+          "delta_psnr_ci95": [
+            -0.19,
+            -0.04
+          ],
+          "delta_ssim": 0.2265,
+          "delta_ssim_ci95": [
+            0.2112,
+            0.2409
+          ],
+          "delta_lpips": -0.4303,
+          "delta_lpips_ci95": [
+            -0.4394,
+            -0.4216
+          ]
+        },
+        "Preset: Quality": {
+          "psnr_mean": 9.87,
+          "psnr_std": 0.34,
+          "ssim_mean": 0.3134,
+          "ssim_std": 0.0625,
+          "lpips_mean": 0.6039,
+          "lpips_std": 0.0342,
+          "mean_lum": 40.27,
+          "hf_res_std": 13.41,
+          "delta_psnr": -0.39,
+          "delta_psnr_ci95": [
+            -0.46,
+            -0.32
+          ],
+          "delta_ssim": 0.2276,
+          "delta_ssim_ci95": [
+            0.2087,
+            0.2457
+          ],
+          "delta_lpips": -0.654,
+          "delta_lpips_ci95": [
+            -0.6653,
+            -0.6423
+          ]
+        }
+      },
+      "pairwise_tests": {
+        "order_a_vs_order_b": {
+          "delta_psnr": -0.28,
+          "ci95_psnr": [
+            -0.31,
+            -0.25
+          ],
+          "delta_lpips": 0.132,
+          "ci95_lpips": [
+            0.1281,
+            0.1358
+          ],
+          "statistically_significant": true
+        },
+        "full_vs_stcd": {
+          "delta_psnr": -4.02,
+          "ci95_psnr": [
+            -4.18,
+            -3.85
+          ],
+          "delta_lpips": 0.0055,
+          "ci95_lpips": [
+            -0.0076,
+            0.019
+          ],
+          "statistically_significant": true
+        }
+      }
+    }
+  },
+  "real_clips": {
+    "summary": {
+      "Raw Input (Unenhanced)": {
+        "mean_lum_mean": 69.01,
+        "sky_ratio_mean": 1.0,
+        "bloom_ratio_mean": 1.0,
+        "rms_contrast_mean": 51.75,
+        "flat_noise_mean": 0.41,
+        "norm_flicker_mean": 0.0785,
+        "niqe_mean": 6.4,
+        "brisque_mean": 57.72,
+        "mean_lum_std": 14.66,
+        "sky_ratio_std": 0.0,
+        "bloom_ratio_std": 0.0,
+        "rms_contrast_std": 5.78,
+        "flat_noise_std": 0.06,
+        "norm_flicker_std": 0.0327,
+        "niqe_std": 0.27,
+        "brisque_std": 5.46
+      },
+      "Fast Preset": {
+        "mean_lum_mean": 103.36,
+        "sky_ratio_mean": 1.88,
+        "bloom_ratio_mean": 1.0,
+        "rms_contrast_mean": 53.28,
+        "flat_noise_mean": 0.39,
+        "norm_flicker_mean": 0.0598,
+        "niqe_mean": 6.6,
+        "brisque_mean": 54.31,
+        "mean_lum_std": 4.77,
+        "sky_ratio_std": 0.9,
+        "bloom_ratio_std": 0.0,
+        "rms_contrast_std": 4.72,
+        "flat_noise_std": 0.05,
+        "norm_flicker_std": 0.0179,
+        "niqe_std": 0.45,
+        "brisque_std": 3.44
+      },
+      "Balanced Preset": {
+        "mean_lum_mean": 102.15,
+        "sky_ratio_mean": 1.81,
+        "bloom_ratio_mean": 1.02,
+        "rms_contrast_mean": 53.67,
+        "flat_noise_mean": 0.35,
+        "norm_flicker_mean": 0.0529,
+        "niqe_mean": 8.06,
+        "brisque_mean": 60.3,
+        "mean_lum_std": 4.6,
+        "sky_ratio_std": 0.84,
+        "bloom_ratio_std": 0.02,
+        "rms_contrast_std": 4.65,
+        "flat_noise_std": 0.04,
+        "norm_flicker_std": 0.0165,
+        "niqe_std": 0.42,
+        "brisque_std": 5.08
+      },
+      "Quality Preset": {
+        "mean_lum_mean": 102.79,
+        "sky_ratio_mean": 1.8,
+        "bloom_ratio_mean": 1.18,
+        "rms_contrast_mean": 54.11,
+        "flat_noise_mean": 0.48,
+        "norm_flicker_mean": 0.0546,
+        "niqe_mean": 7.84,
+        "brisque_mean": 63.26,
+        "mean_lum_std": 4.88,
+        "sky_ratio_std": 0.84,
+        "bloom_ratio_std": 0.08,
+        "rms_contrast_std": 4.75,
+        "flat_noise_std": 0.05,
+        "norm_flicker_std": 0.0166,
+        "niqe_std": 0.35,
+        "brisque_std": 5.11
+      },
+      "STCD Comparison": {
+        "mean_lum_mean": 163.85,
+        "sky_ratio_mean": 5.61,
+        "bloom_ratio_mean": 1.9,
+        "rms_contrast_mean": 47.17,
+        "flat_noise_mean": 0.73,
+        "norm_flicker_mean": 0.046,
+        "niqe_mean": 7.07,
+        "brisque_mean": 45.96,
+        "mean_lum_std": 10.76,
+        "sky_ratio_std": 2.57,
+        "bloom_ratio_std": 1.37,
+        "rms_contrast_std": 3.62,
+        "flat_noise_std": 0.04,
+        "norm_flicker_std": 0.0168,
+        "niqe_std": 0.34,
+        "brisque_std": 5.06
+      },
+      "Hybrid (SCUNet -> STCD)": {
+        "mean_lum_mean": 162.8,
+        "sky_ratio_mean": 5.44,
+        "bloom_ratio_mean": 1.94,
+        "rms_contrast_mean": 47.85,
+        "flat_noise_mean": 0.71,
+        "norm_flicker_mean": 0.044,
+        "niqe_mean": 7.23,
+        "brisque_mean": 48.9,
+        "mean_lum_std": 11.1,
+        "sky_ratio_std": 2.39,
+        "bloom_ratio_std": 1.4,
+        "rms_contrast_std": 4.57,
+        "flat_noise_std": 0.06,
+        "norm_flicker_std": 0.0171,
+        "niqe_std": 0.39,
+        "brisque_std": 5.58
+      }
+    },
+    "by_clip": {
+      "real_night_dashcam_01.mp4": {
+        "Raw Input (Unenhanced)": {
+          "mean_lum": 79.67,
+          "sky_ratio": 1.0,
+          "bloom_ratio": 1.0,
+          "rms_contrast": 51.96,
+          "flat_noise": 0.32,
+          "norm_flicker": 0.0898,
+          "niqe": 6.47,
+          "brisque": 58.01
+        },
+        "Fast Preset": {
+          "mean_lum": 106.72,
+          "sky_ratio": 1.52,
+          "bloom_ratio": 1.0,
+          "rms_contrast": 50.97,
+          "flat_noise": 0.32,
+          "norm_flicker": 0.0739,
+          "niqe": 7.24,
+          "brisque": 56.36
+        },
+        "Balanced Preset": {
+          "mean_lum": 106.37,
+          "sky_ratio": 1.49,
+          "bloom_ratio": 1.01,
+          "rms_contrast": 51.24,
+          "flat_noise": 0.29,
+          "norm_flicker": 0.0692,
+          "niqe": 8.68,
+          "brisque": 63.74
+        },
+        "Quality Preset": {
+          "mean_lum": 106.78,
+          "sky_ratio": 1.5,
+          "bloom_ratio": 1.1,
+          "rms_contrast": 51.54,
+          "flat_noise": 0.42,
+          "norm_flicker": 0.07,
+          "niqe": 8.48,
+          "brisque": 63.72
+        },
+        "STCD Comparison": {
+          "mean_lum": 180.92,
+          "sky_ratio": 4.53,
+          "bloom_ratio": 3.26,
+          "rms_contrast": 45.99,
+          "flat_noise": 0.68,
+          "norm_flicker": 0.0517,
+          "niqe": 7.66,
+          "brisque": 53.83
+        },
+        "Hybrid (SCUNet -> STCD)": {
+          "mean_lum": 180.66,
+          "sky_ratio": 4.45,
+          "bloom_ratio": 3.37,
+          "rms_contrast": 46.69,
+          "flat_noise": 0.64,
+          "norm_flicker": 0.05,
+          "niqe": 8.0,
+          "brisque": 58.91
+        }
+      },
+      "real_night_dashcam_02.mp4": {
+        "Raw Input (Unenhanced)": {
+          "mean_lum": 79.45,
+          "sky_ratio": 1.0,
+          "bloom_ratio": 1.0,
+          "rms_contrast": 52.47,
+          "flat_noise": 0.48,
+          "norm_flicker": 0.0698,
+          "niqe": 5.96,
+          "brisque": 50.91
+        },
+        "Fast Preset": {
+          "mean_lum": 105.94,
+          "sky_ratio": 1.37,
+          "bloom_ratio": 1.0,
+          "rms_contrast": 50.12,
+          "flat_noise": 0.44,
+          "norm_flicker": 0.0603,
+          "niqe": 6.24,
+          "brisque": 51.45
+        },
+        "Balanced Preset": {
+          "mean_lum": 103.46,
+          "sky_ratio": 1.33,
+          "bloom_ratio": 1.01,
+          "rms_contrast": 50.53,
+          "flat_noise": 0.38,
+          "norm_flicker": 0.0567,
+          "niqe": 7.81,
+          "brisque": 58.01
+        },
+        "Quality Preset": {
+          "mean_lum": 105.29,
+          "sky_ratio": 1.35,
+          "bloom_ratio": 1.13,
+          "rms_contrast": 50.92,
+          "flat_noise": 0.54,
+          "norm_flicker": 0.0591,
+          "niqe": 7.53,
+          "brisque": 62.05
+        },
+        "STCD Comparison": {
+          "mean_lum": 166.71,
+          "sky_ratio": 3.08,
+          "bloom_ratio": 0.4,
+          "rms_contrast": 44.47,
+          "flat_noise": 0.7,
+          "norm_flicker": 0.0371,
+          "niqe": 6.87,
+          "brisque": 47.23
+        },
+        "Hybrid (SCUNet -> STCD)": {
+          "mean_lum": 165.53,
+          "sky_ratio": 3.08,
+          "bloom_ratio": 0.35,
+          "rms_contrast": 44.42,
+          "flat_noise": 0.66,
+          "norm_flicker": 0.0345,
+          "niqe": 6.98,
+          "brisque": 48.47
+        }
+      },
+      "real_night_dashcam_03.mp4": {
+        "Raw Input (Unenhanced)": {
+          "mean_lum": 42.23,
+          "sky_ratio": 1.0,
+          "bloom_ratio": 1.0,
+          "rms_contrast": 41.78,
+          "flat_noise": 0.43,
+          "norm_flicker": 0.1332,
+          "niqe": 6.41,
+          "brisque": 59.81
+        },
+        "Fast Preset": {
+          "mean_lum": 105.11,
+          "sky_ratio": 3.68,
+          "bloom_ratio": 1.01,
+          "rms_contrast": 52.22,
+          "flat_noise": 0.39,
+          "norm_flicker": 0.0683,
+          "niqe": 5.99,
+          "brisque": 51.15
+        },
+        "Balanced Preset": {
+          "mean_lum": 104.25,
+          "sky_ratio": 3.49,
+          "bloom_ratio": 1.05,
+          "rms_contrast": 52.94,
+          "flat_noise": 0.38,
+          "norm_flicker": 0.0627,
+          "niqe": 7.44,
+          "brisque": 52.7
+        },
+        "Quality Preset": {
+          "mean_lum": 104.16,
+          "sky_ratio": 3.48,
+          "bloom_ratio": 1.21,
+          "rms_contrast": 53.36,
+          "flat_noise": 0.47,
+          "norm_flicker": 0.0642,
+          "niqe": 7.61,
+          "brisque": 55.89
+        },
+        "STCD Comparison": {
+          "mean_lum": 148.14,
+          "sky_ratio": 8.68,
+          "bloom_ratio": 1.88,
+          "rms_contrast": 53.7,
+          "flat_noise": 0.8,
+          "norm_flicker": 0.0756,
+          "niqe": 6.81,
+          "brisque": 43.42
+        },
+        "Hybrid (SCUNet -> STCD)": {
+          "mean_lum": 146.7,
+          "sky_ratio": 8.13,
+          "bloom_ratio": 2.15,
+          "rms_contrast": 56.26,
+          "flat_noise": 0.8,
+          "norm_flicker": 0.0742,
+          "niqe": 6.97,
+          "brisque": 41.65
+        }
+      },
+      "real_night_dashcam_04.mp4": {
+        "Raw Input (Unenhanced)": {
+          "mean_lum": 79.54,
+          "sky_ratio": 1.0,
+          "bloom_ratio": 1.0,
+          "rms_contrast": 52.64,
+          "flat_noise": 0.45,
+          "norm_flicker": 0.0659,
+          "niqe": 6.37,
+          "brisque": 53.28
+        },
+        "Fast Preset": {
+          "mean_lum": 105.15,
+          "sky_ratio": 1.35,
+          "bloom_ratio": 1.0,
+          "rms_contrast": 50.46,
+          "flat_noise": 0.44,
+          "norm_flicker": 0.0712,
+          "niqe": 6.62,
+          "brisque": 52.5
+        },
+        "Balanced Preset": {
+          "mean_lum": 103.47,
+          "sky_ratio": 1.32,
+          "bloom_ratio": 1.01,
+          "rms_contrast": 50.81,
+          "flat_noise": 0.37,
+          "norm_flicker": 0.0544,
+          "niqe": 8.15,
+          "brisque": 59.45
+        },
+        "Quality Preset": {
+          "mean_lum": 104.52,
+          "sky_ratio": 1.33,
+          "bloom_ratio": 1.13,
+          "rms_contrast": 51.27,
+          "flat_noise": 0.55,
+          "norm_flicker": 0.0568,
+          "niqe": 7.62,
+          "brisque": 62.73
+        },
+        "STCD Comparison": {
+          "mean_lum": 165.18,
+          "sky_ratio": 3.07,
+          "bloom_ratio": 0.37,
+          "rms_contrast": 43.54,
+          "flat_noise": 0.73,
+          "norm_flicker": 0.0389,
+          "niqe": 7.24,
+          "brisque": 46.91
+        },
+        "Hybrid (SCUNet -> STCD)": {
+          "mean_lum": 163.76,
+          "sky_ratio": 3.07,
+          "bloom_ratio": 0.3,
+          "rms_contrast": 43.37,
+          "flat_noise": 0.68,
+          "norm_flicker": 0.0363,
+          "niqe": 7.08,
+          "brisque": 47.75
+        }
+      },
+      "real_night_dashcam_05.mp4": {
+        "Raw Input (Unenhanced)": {
+          "mean_lum": 64.18,
+          "sky_ratio": 1.0,
+          "bloom_ratio": 1.0,
+          "rms_contrast": 59.9,
+          "flat_noise": 0.36,
+          "norm_flicker": 0.0337,
+          "niqe": 6.8,
+          "brisque": 66.57
+        },
+        "Fast Preset": {
+          "mean_lum": 93.89,
+          "sky_ratio": 1.48,
+          "bloom_ratio": 1.01,
+          "rms_contrast": 62.61,
+          "flat_noise": 0.35,
+          "norm_flicker": 0.0251,
+          "niqe": 6.92,
+          "brisque": 60.1
+        },
+        "Balanced Preset": {
+          "mean_lum": 93.21,
+          "sky_ratio": 1.4,
+          "bloom_ratio": 1.01,
+          "rms_contrast": 62.81,
+          "flat_noise": 0.33,
+          "norm_flicker": 0.0215,
+          "niqe": 8.24,
+          "brisque": 67.61
+        },
+        "Quality Preset": {
+          "mean_lum": 93.19,
+          "sky_ratio": 1.35,
+          "bloom_ratio": 1.31,
+          "rms_contrast": 63.46,
+          "flat_noise": 0.44,
+          "norm_flicker": 0.0227,
+          "niqe": 7.94,
+          "brisque": 71.89
+        },
+        "STCD Comparison": {
+          "mean_lum": 158.3,
+          "sky_ratio": 8.7,
+          "bloom_ratio": 3.61,
+          "rms_contrast": 48.17,
+          "flat_noise": 0.75,
+          "norm_flicker": 0.0265,
+          "niqe": 6.76,
+          "brisque": 38.39
+        },
+        "Hybrid (SCUNet -> STCD)": {
+          "mean_lum": 157.35,
+          "sky_ratio": 8.48,
+          "bloom_ratio": 3.51,
+          "rms_contrast": 48.5,
+          "flat_noise": 0.75,
+          "norm_flicker": 0.025,
+          "niqe": 7.1,
+          "brisque": 47.71
+        }
+      }
+    }
+  }
+}

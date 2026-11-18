@@ -1,0 +1,32 @@
+{
+  "realesr-general-x4v3": {
+    "relative_path": "RealESRGAN\\realesr-general-x4v3.pth",
+    "size_bytes": 4885111,
+    "sha256": "8dc7edb9ac80ccdc30c3a5dca6616509367f05fbc184ad95b731f05bece96292"
+  },
+  "RealESRGAN_x2plus": {
+    "relative_path": "RealESRGAN\\RealESRGAN_x2plus.pth",
+    "size_bytes": 67061725,
+    "sha256": "49fafd45f8fd7aa8d31ab2a22d14d91b536c34494a5cfe31eb5d89c2fa266abb"
+  },
+  "scunet_color_real_psnr": {
+    "relative_path": "SCUNet\\scunet_color_real_psnr.pth",
+    "size_bytes": 71982841,
+    "sha256": "fa78899ba2caec9d235a900e91d96c689da71c42029230c2028b00f09f809c2e"
+  },
+  "indoor_G": {
+    "relative_path": "STCD\\indoor_G.pth",
+    "size_bytes": 7258767,
+    "sha256": "dc50957303b2ac15d2f71a32c3d4231c47c5d3f8dc21daa52bccf48faea49cda"
+  },
+  "Zero_DCE++_Epoch99": {
+    "relative_path": "ZeroDCE\\Zero_DCE++_Epoch99.pth",
+    "size_bytes": 52395,
+    "sha256": "ca8855b90df9a80fa4195a831f33d3476b1964f787eb70602797c773067f3b84"
+  },
+  "Zero_DCE_Epoch99": {
+    "relative_path": "ZeroDCE\\Zero_DCE_Epoch99.pth",
+    "size_bytes": 320017,
+    "sha256": "a4395acb874f320375d9704997cef874eaaaaa26a1777ceb29a92b70f74c3612"
+  }
+}

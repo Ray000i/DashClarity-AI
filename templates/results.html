@@ -56,41 +56,26 @@
     </div>
 
     <!-- Active Viewport Canvas -->
-    <div id="viewport-canvas" class="viewport-canvas">
-        <!-- 1. Split Slider Container (Active by default) -->
-        <div id="container-split-slider" class="split-slider-wrap">
-            <!-- Enhanced Background Video -->
-            <video id="split-enhanced-video" src="/media/enhanced/{{ job_id }}" playsinline muted></video>
-
-            <!-- Original Foreground Video (Clipped) -->
-            <div id="split-slider-clip" class="split-clip">
-                <video id="split-original-video" src="/media/original/{{ job_id }}" playsinline muted></video>
-                <div class="side-tag">Input (raw)</div>
-            </div>
-
-            <div class="side-tag" style="left: auto; right: 10px;">Output (enhanced)</div>
-
-            <!-- Slider Drag Handle -->
-            <div id="split-slider-handle" class="split-handle">
-                &#8596;
-            </div>
-
-            <!-- Loupe Magnifier Lens -->
-            <div id="loupe-lens" class="loupe-lens">
-                <canvas id="loupe-canvas" class="loupe-canvas"></canvas>
-            </div>
+    <div id="viewport-canvas" class="viewport-canvas mode-split" style="--split-pos: 50%;">
+        <!-- Enhanced Output Video (Underneath in split mode, right in side mode) -->
+        <div id="wrapper-enhanced" class="video-panel panel-enhanced">
+            <div class="side-tag side-tag-right">Output (enhanced)</div>
+            <video id="player-enhanced" src="/media/enhanced/{{ job_id }}" playsinline muted preload="auto"></video>
         </div>
 
-        <!-- 2. Side-by-Side Dual Container -->
-        <div id="container-side-by-side" class="side-by-side-wrap hidden">
-            <div class="side-viewport" style="border-right: 1px solid var(--border-rule);">
-                <div class="side-tag">Input (raw)</div>
-                <video id="player-original" src="/media/original/{{ job_id }}" playsinline muted></video>
-            </div>
-            <div class="side-viewport">
-                <div class="side-tag">Output (enhanced)</div>
-                <video id="player-enhanced" src="/media/enhanced/{{ job_id }}" playsinline muted></video>
-            </div>
+        <!-- Raw Input Video (Clipped in split mode, left in side mode) -->
+        <div id="wrapper-original" class="video-panel panel-original">
+            <div class="side-tag">Input (raw)</div>
+            <video id="player-original" src="/media/original/{{ job_id }}" playsinline muted preload="auto"></video>
+        </div>
+
+        <!-- Split Slider Line & Handle (Active in split mode) -->
+        <div id="split-slider-line" class="split-line"></div>
+        <div id="split-slider-handle" class="split-handle">&#8596;</div>
+
+        <!-- Loupe Magnifier Lens -->
+        <div id="loupe-lens" class="loupe-lens">
+            <canvas id="loupe-canvas" class="loupe-canvas"></canvas>
         </div>
     </div>
 

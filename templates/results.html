@@ -5,20 +5,18 @@
 {% block content %}
 <div class="results-deck">
     <!-- Header & Job Identification -->
-    <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.75rem;">
+    <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.75rem;">
         <div>
-            <h1 style="font-size: 1.35rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.25rem;">
-                Visual comparison & review
-            </h1>
-            <p style="font-size: 0.82rem; color: var(--text-muted);">
-                Synchronized dual-stream playback. Click loupe or press <kbd style="background: var(--bg-elevated); padding: 0.1rem 0.3rem; border: 1px solid var(--border-rule); border-radius: 3px; font-family: var(--font-mono);">L</kbd> for 3x detail magnification.
+            <h1>Visual comparison & review</h1>
+            <p class="max-ch" style="color: var(--text-muted); font-size: 0.95rem; margin-top: 0.25rem;">
+                Synchronized dual-stream playback. Click loupe or press <kbd style="background: var(--bg-elevated); padding: 0.15rem 0.35rem; border: 1px solid var(--border-rule); border-radius: 3px; font-family: var(--font-mono);">L</kbd> for 3x detail magnification.
             </p>
         </div>
-        <div style="display: flex; align-items: center; gap: 0.5rem;">
-            <button class="btn btn-secondary" style="font-size: 0.78rem; padding: 0.35rem 0.65rem;" onclick="toggleShortcutsModal();">
+        <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+            <button class="btn btn-secondary" onclick="toggleShortcutsModal();">
                 Keyboard shortcuts
             </button>
-            <a href="{{ url_for('upload_page') }}" class="btn btn-secondary" style="font-size: 0.78rem; padding: 0.35rem 0.65rem;">
+            <a href="{{ url_for('upload_page') }}" class="btn btn-secondary">
                 Enhance another clip
             </a>
         </div>
@@ -82,15 +80,15 @@
     <!-- Master Synchronized Transport Controller -->
     <div class="transport-bar">
         <!-- Play / Pause -->
-        <button id="btn-play-pause" class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.82rem;" onclick="toggleSyncPlay();">
+        <button id="btn-play-pause" class="btn btn-secondary" onclick="toggleSyncPlay();">
             <span id="label-play">&#9658; Play</span>
         </button>
 
         <!-- Frame Step Buttons -->
-        <button class="btn btn-secondary" style="padding: 0.35rem 0.5rem; font-size: 0.75rem;" title="Step backward one frame (Left arrow)" onclick="stepFrame(-1);">
+        <button class="btn btn-secondary" style="min-width: 40px; padding: 0.4rem 0.6rem;" title="Step backward one frame (Left arrow)" onclick="stepFrame(-1);">
             &#10094;
         </button>
-        <button class="btn btn-secondary" style="padding: 0.35rem 0.5rem; font-size: 0.75rem;" title="Step forward one frame (Right arrow)" onclick="stepFrame(1);">
+        <button class="btn btn-secondary" style="min-width: 40px; padding: 0.4rem 0.6rem;" title="Step forward one frame (Right arrow)" onclick="stepFrame(1);">
             &#10095;
         </button>
 
@@ -113,7 +111,7 @@
     </div>
 
     <!-- Download & Export Actions -->
-    <div style="display: flex; gap: 0.75rem; margin-top: 1rem; flex-wrap: wrap;">
+    <div style="display: flex; gap: 0.75rem; margin-top: 1.25rem; flex-wrap: wrap;">
         <a id="btn-download-enhanced" href="/api/download/{{ job_id }}" class="btn btn-primary" download>
             Download enhanced video
         </a>
@@ -124,11 +122,9 @@
 
     <!-- Generic Scientific Quality Metrics Panel -->
     <div class="metrics-section">
-        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.4rem;">
-            <h2 style="font-size: 1.05rem; font-weight: 600; color: var(--text-primary);">
-                Visual quality and stability metrics
-            </h2>
-            <span style="font-size: 0.75rem; color: var(--text-muted);">
+        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+            <h2>Visual quality and stability metrics</h2>
+            <span style="font-size: 0.8rem; color: var(--text-muted);">
                 Values extracted from <code style="font-family: var(--font-mono);">metrics.json</code>
             </span>
         </div>

@@ -3,60 +3,95 @@
 {% block title %}Past Jobs History — DashClarity AI{% endblock %}
 
 {% block content %}
-<div style="max-width: 960px; margin: 0 auto;">
-    <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 1.25rem;">
+{% set show_all = request.args.get('show_all') == '1' %}
+{% set hide_prefixes = ('test_', 'sample', 'clip_test', 'night_upload') %}
+{% set visible_jobs = [] %}
+{% if jobs %}
+    {% for j in jobs %}
+        {% set is_hidden = not show_all and (j.job_id.startswith(hide_prefixes) or j.clip_name.startswith(hide_prefixes)) %}
+        {% if not is_hidden %}
+            {% if visible_jobs.append(j) %}{% endif %}
+        {% endif %}
+    {% endfor %}
+{% endif %}
+
+<div>
+    <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
         <div>
-            <h1 style="font-size: 1.35rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.25rem;">
-                Past enhancement jobs
-            </h1>
-            <p style="font-size: 0.84rem; color: var(--text-muted);">
+            <h1>Past enhancement jobs</h1>
+            <p class="max-ch" style="color: var(--text-muted); font-size: 0.95rem; margin-top: 0.25rem;">
                 Stored records and metrics in the output directory. Click any clip to reopen comparison.
             </p>
         </div>
-        <a href="{{ url_for('upload_page') }}" class="btn btn-primary" style="font-size: 0.82rem; padding: 0.4rem 0.8rem;">
-            Enhance new clip
-        </a>
+        <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+            {% if show_all %}
+            <a href="{{ url_for('history_page') }}" class="btn btn-secondary">
+                Hide test clips
+            </a>
+            {% else %}
+            <a href="{{ url_for('history_page', show_all=1) }}" class="btn btn-secondary" title="Include jobs starting with test_, sample, clip_test, night_upload">
+                Show all clips
+            </a>
+            {% endif %}
+            <a href="{{ url_for('upload_page') }}" class="btn btn-primary">
+                Enhance new clip
+            </a>
+        </div>
     </div>
 
-    {% if jobs and jobs|length > 0 %}
-    <div class="card" style="padding: 0; overflow-x: auto;">
+    {% if visible_jobs and visible_jobs|length > 0 %}
+    <div class="table-wrap">
         <table class="history-table">
+            <colgroup>
+                <col style="width: 110px;">
+                <col style="width: 30%;">
+                <col style="width: 16%;">
+                <col style="width: 22%;">
+                <col style="width: 12%;">
+                <col style="width: 180px;">
+            </colgroup>
             <thead>
                 <tr>
-                    <th style="width: 100px;">Preview</th>
+                    <th>Preview</th>
                     <th>Clip name</th>
-                    <th>Processed</th>
-                    <th>Output spec</th>
+                    <th>Date</th>
+                    <th>Output spec & time</th>
                     <th>Rate</th>
                     <th style="text-align: right;">Actions</th>
                 </tr>
             </thead>
             <tbody>
-                {% for j in jobs %}
+                {% for j in visible_jobs %}
                 <tr>
-                    <td>
+                    <td class="cell-preview" data-label="Preview">
                         <img src="{{ j.thumbnail_url }}" alt="Preview" class="history-thumb" onerror="this.style.display='none';">
                     </td>
-                    <td>
-                        <div style="font-weight: 500; color: var(--text-primary);">{{ j.clip_name }}</div>
-                        <div class="tabular" style="font-size: 0.72rem; color: var(--text-muted);">ID: {{ j.job_id[:12] }}</div>
+                    <td class="clip-name-cell" data-label="Clip name">
+                        <div class="clip-name-title" title="{{ j.clip_name }}">{{ j.clip_name }}</div>
+                        <div class="tabular" style="font-size: 0.75rem; color: var(--text-muted);">ID: {{ j.job_id[:12] }}</div>
                     </td>
-                    <td>
-                        <div style="color: var(--text-muted); font-size: 0.8rem;">{{ j.created_at }}</div>
+                    <td data-label="Date">
+                        <div style="color: var(--text-muted); font-size: 0.85rem;">{{ j.created_at }}</div>
                     </td>
-                    <td>
-                        <div class="tabular" style="font-size: 0.8rem; color: var(--text-primary);">{{ j.resolution }}</div>
-                        <div style="font-size: 0.72rem; color: var(--text-muted);">{{ j.duration }}</div>
+                    <td data-label="Output spec">
+                        <div class="tabular" style="font-size: 0.85rem; color: var(--text-primary); font-weight: 500;">{{ j.resolution }}</div>
+                        <div style="font-size: 0.78rem; color: var(--text-muted);">Processing time: {{ j.duration|replace(' processed', '') }}</div>
                     </td>
-                    <td>
-                        <div class="tabular" style="font-size: 0.8rem; color: var(--accent-amber);">{{ j.fps }}</div>
+                    <td data-label="Rate">
+                        <div class="tabular history-fps" data-job-id="{{ j.job_id }}" style="font-size: 0.88rem; color: var(--accent-amber); font-weight: 500;">
+                            {% if j.fps and j.fps != '--' %}
+                                {{ "%.2f"|format(j.fps|replace(' FPS','')|float) }} FPS
+                            {% else %}
+                                --
+                            {% endif %}
+                        </div>
                     </td>
-                    <td style="text-align: right;">
-                        <div style="display: flex; gap: 0.4rem; justify-content: flex-end;">
-                            <a href="{{ j.result_url }}" class="btn btn-secondary" style="font-size: 0.76rem; padding: 0.3rem 0.6rem;">
+                    <td class="actions-cell" data-label="Actions">
+                        <div class="actions-wrap">
+                            <a href="{{ j.result_url }}" class="btn btn-secondary" style="padding: 0.4rem 0.75rem; font-size: 0.82rem;">
                                 Review
                             </a>
-                            <a href="{{ j.download_url }}" class="btn btn-secondary" style="font-size: 0.76rem; padding: 0.3rem 0.6rem;" download>
+                            <a href="{{ j.download_url }}" class="btn btn-secondary" style="padding: 0.4rem 0.75rem; font-size: 0.82rem;" download>
                                 Download
                             </a>
                         </div>
@@ -68,11 +103,17 @@
     </div>
     {% else %}
     <div class="card" style="text-align: center; padding: 3rem 1.5rem;">
-        <div style="font-size: 1.05rem; font-weight: 500; color: var(--text-primary); margin-bottom: 0.4rem;">
+        <div style="font-size: 1.15rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.5rem;">
             No past jobs found
         </div>
-        <p style="font-size: 0.84rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+        <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 1.5rem;">
+            {% if not show_all and jobs and jobs|length > 0 %}
+            {{ jobs|length }} test or sample job(s) are hidden by default.
+            <br>
+            <a href="{{ url_for('history_page', show_all=1) }}" style="color: var(--accent-amber); text-decoration: underline; display: inline-block; margin-top: 0.5rem;">Click here to show test & sample clips</a>.
+            {% else %}
             You have not enhanced any dashcam recordings yet.
+            {% endif %}
         </p>
         <a href="{{ url_for('upload_page') }}" class="btn btn-primary">
             Upload your first clip
@@ -80,4 +121,13 @@
     </div>
     {% endif %}
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        initHistoryPage();
+    });
+</script>
 {% endblock %}

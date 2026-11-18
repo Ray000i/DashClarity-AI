@@ -67,6 +67,22 @@ function initUploadPage() {
     }
 }
 
+function renderPresetCard(p, isSelected) {
+    const fpsLabel = p.measured_fps_720p ? `${p.measured_fps_720p} FPS` : "Custom";
+    return `
+        <div class="preset-card ${isSelected ? 'selected' : ''}" onclick="selectPreset('${p.key}', this)">
+            <input type="radio" name="preset-radio" value="${p.key}" class="preset-radio" ${isSelected ? 'checked' : ''}>
+            <div style="flex: 1; min-width: 0;">
+                <div class="preset-header">
+                    <span class="preset-name">${escapeHtml(p.label)}</span>
+                    <span class="preset-fps">${fpsLabel}</span>
+                </div>
+                <div class="preset-tradeoff">${escapeHtml(p.tradeoff)}</div>
+            </div>
+        </div>
+    `;
+}
+
 function loadPresets() {
     const container = document.getElementById("presets-container");
     if (!container) return;
@@ -80,23 +96,31 @@ function loadPresets() {
                 return;
             }
 
+            const recommendedKeys = ["fast", "balanced", "quality"];
+            const recommended = presets.filter(p => recommendedKeys.includes(p.key));
+            const ablation = presets.filter(p => !recommendedKeys.includes(p.key));
+
             let html = "";
-            presets.forEach((p, index) => {
+            // Render Recommended presets
+            recommended.forEach((p, index) => {
                 const isSelected = p.key === "balanced" || (index === 0 && !presets.some(x => x.key === "balanced"));
-                const fpsLabel = p.measured_fps_720p ? `${p.measured_fps_720p} FPS` : "Custom";
-                html += `
-                    <div class="preset-card ${isSelected ? 'selected' : ''}" onclick="selectPreset('${p.key}', this)">
-                        <input type="radio" name="preset-radio" value="${p.key}" class="preset-radio" ${isSelected ? 'checked' : ''}>
-                        <div style="flex: 1;">
-                            <div class="preset-header">
-                                <span class="preset-name">${escapeHtml(p.label)}</span>
-                                <span class="preset-fps">${fpsLabel}</span>
-                            </div>
-                            <div class="preset-tradeoff">${escapeHtml(p.tradeoff)}</div>
-                        </div>
-                    </div>
-                `;
+                html += renderPresetCard(p, isSelected);
             });
+
+            // Render Research / ablation presets in collapsed details
+            if (ablation.length > 0) {
+                html += `
+                    <details class="presets-details">
+                        <summary class="presets-summary">
+                            <span>Research / ablation presets (STCD, Hybrid, Classical)</span>
+                            <span style="font-size: 0.72rem; color: var(--accent-amber);">&#9660;</span>
+                        </summary>
+                        <div class="presets-content">
+                            ${ablation.map(p => renderPresetCard(p, false)).join("")}
+                        </div>
+                    </details>
+                `;
+            }
 
             container.innerHTML = html;
         })
@@ -149,6 +173,8 @@ function handleSelectedFile(file) {
             displayVideoPreview(file, res.metadata, res.preview_url);
             const startBtn = document.getElementById("btn-start-enhance");
             if (startBtn) startBtn.disabled = false;
+            const hint = document.getElementById("enhance-hint");
+            if (hint) hint.classList.add("hidden");
         } else {
             let err = "Upload failed.";
             try {
@@ -699,4 +725,24 @@ function escapeHtml(str) {
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
+}
+
+// ============================================================================
+// HISTORY PAGE CONTROLLER
+// ============================================================================
+
+function initHistoryPage() {
+    document.querySelectorAll(".history-fps[data-job-id]").forEach(el => {
+        const jobId = el.getAttribute("data-job-id");
+        if (!jobId) return;
+        fetch(`/api/result/${jobId}`)
+            .then(r => r.json())
+            .then(data => {
+                const fps = data?.metrics?.technical_summary?.processing_fps;
+                if (typeof fps === "number" && !isNaN(fps)) {
+                    el.innerText = `${fps.toFixed(2)} FPS`;
+                }
+            })
+            .catch(() => {});
+    });
 }

@@ -3,17 +3,15 @@
 {% block title %}Upload Clip — DashClarity AI{% endblock %}
 
 {% block content %}
-<div style="max-width: 980px; margin: 0 auto;">
+<div>
     <div style="margin-bottom: 1.5rem;">
-        <h1 style="font-size: 1.35rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.35rem;">
-            Upload dashcam clip
-        </h1>
-        <p style="font-size: 0.86rem; color: var(--text-muted);">
+        <h1>Upload dashcam clip</h1>
+        <p class="max-ch" style="color: var(--text-muted); font-size: 0.95rem; margin-top: 0.25rem;">
             Select a raw dashcam recording to inspect and calibrate enhancement stages. Max file size: {{ max_upload_size_mb }} MB.
         </p>
     </div>
 
-    <div style="display: grid; grid-template-columns: 1.1fr 1fr; gap: 1.25rem;">
+    <div class="upload-grid">
         <!-- Left Column: Ingestion Deck & Preview -->
         <div>
             <!-- Dropzone -->
@@ -75,8 +73,8 @@
             </div>
         </div>
 
-        <!-- Right Column: Calibration & Presets -->
-        <div class="card">
+        <!-- Right Column: Calibration & Presets (Sticky panel) -->
+        <div class="card calibration-panel">
             <div class="card-header">
                 <span class="card-title">Enhancement calibration</span>
             </div>
@@ -141,6 +139,7 @@
                 <button id="btn-start-enhance" class="btn btn-primary" style="width: 100%;" disabled>
                     Enhance clip
                 </button>
+                <div id="enhance-hint" class="btn-hint">Upload a clip first</div>
             </div>
         </div>
     </div>

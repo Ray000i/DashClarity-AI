@@ -3,19 +3,17 @@
 {% block title %}DashClarity AI — Video Review Suite{% endblock %}
 
 {% block content %}
-<div style="max-width: 860px; margin: 1rem auto 2rem auto;">
+<div>
     <!-- Title & Purpose -->
     <div style="margin-bottom: 2rem;">
-        <h1 style="font-size: 1.6rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.5rem;">
-            Dashcam video enhancement and review
-        </h1>
-        <p style="font-size: 0.95rem; color: var(--text-muted); line-height: 1.5; max-width: 72ch;">
+        <h1>Dashcam video enhancement and review</h1>
+        <p class="max-ch" style="color: var(--text-muted); font-size: 1rem; margin-top: 0.5rem;">
             Restores low-light dashcam recordings for incident inspection and insurance evaluation. Combines neural sensor denoising, adaptive illumination curve estimation, anti-ringing super-resolution, and motion-compensated temporal consistency.
         </p>
     </div>
 
     <!-- Primary Action Bar -->
-    <div style="display: flex; gap: 0.75rem; margin-bottom: 2.5rem;">
+    <div style="display: flex; gap: 0.75rem; margin-bottom: 2.5rem; flex-wrap: wrap;">
         <a href="{{ url_for('upload_page') }}" class="btn btn-primary">
             Enhance a clip
         </a>
@@ -27,21 +25,27 @@
         </a>
     </div>
 
-    <!-- Pipeline Stage Overview Cards -->
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+    <!-- Pipeline Stage Overview Cards (2x2 on desktop, 1 column on mobile) -->
+    <div class="pipeline-grid">
         <div class="card">
             <div class="card-header">
-                <span class="card-title">1. Sensor denoise</span>
+                <div style="display: flex; align-items: center;">
+                    <span class="step-badge">1</span>
+                    <span class="card-title">Sensor denoise</span>
+                </div>
                 <span style="font-family: var(--font-mono); font-size: 0.76rem; color: var(--text-muted);">SCUNet</span>
             </div>
             <p class="card-desc">
-                Removes high-ISO CMOS sensor noise and compression block artifacts while preserving road textures and asphalt grain.
+                Removes high-ISO CMOS sensor noise and compression block artifacts before illumination boost to avoid amplifying sensor grain.
             </p>
         </div>
 
         <div class="card">
             <div class="card-header">
-                <span class="card-title">2. Illumination boost</span>
+                <div style="display: flex; align-items: center;">
+                    <span class="step-badge">2</span>
+                    <span class="card-title">Illumination boost</span>
+                </div>
                 <span style="font-family: var(--font-mono); font-size: 0.76rem; color: var(--text-muted);">Zero-DCE++</span>
             </div>
             <p class="card-desc">
@@ -51,7 +55,10 @@
 
         <div class="card">
             <div class="card-header">
-                <span class="card-title">3. Detail restoration</span>
+                <div style="display: flex; align-items: center;">
+                    <span class="step-badge">3</span>
+                    <span class="card-title">Detail restoration</span>
+                </div>
                 <span style="font-family: var(--font-mono); font-size: 0.76rem; color: var(--text-muted);">Real-ESRGAN</span>
             </div>
             <p class="card-desc">
@@ -61,12 +68,45 @@
 
         <div class="card">
             <div class="card-header">
-                <span class="card-title">4. Temporal stability</span>
+                <div style="display: flex; align-items: center;">
+                    <span class="step-badge">4</span>
+                    <span class="card-title">Temporal stability</span>
+                </div>
                 <span style="font-family: var(--font-mono); font-size: 0.76rem; color: var(--text-muted);">Farneback flow</span>
             </div>
             <p class="card-desc">
                 Warps previous frames along camera motion vectors, eliminating inter-frame flicker and ghosting on moving roads.
             </p>
+        </div>
+    </div>
+
+    <!-- How It Works Section Strip -->
+    <div class="workflow-strip">
+        <div class="workflow-header">
+            <h2>How it works</h2>
+            <span style="font-size: 0.82rem; color: var(--text-muted);">End-to-end local inference</span>
+        </div>
+        <div class="workflow-grid">
+            <div class="workflow-item">
+                <span class="workflow-step-num">STEP 01</span>
+                <div class="workflow-step-title">Ingest footage</div>
+                <p class="workflow-step-desc">Upload raw nighttime dashcam video (H.264, MP4, AVI, MKV). Container format, resolution, and framerate are probed locally.</p>
+            </div>
+            <div class="workflow-item">
+                <span class="workflow-step-num">STEP 02</span>
+                <div class="workflow-step-title">Calibrate preset</div>
+                <p class="workflow-step-desc">Select a preset (Fast ~20 FPS, Balanced ~3.5 FPS, Quality ~0.6 FPS) or customize individual pipeline stages.</p>
+            </div>
+            <div class="workflow-item">
+                <span class="workflow-step-num">STEP 03</span>
+                <div class="workflow-step-title">Neural restoration</div>
+                <p class="workflow-step-desc">Hardware-accelerated execution: CMOS denoising &rarr; curve boost &rarr; super-resolution &rarr; temporal optical flow.</p>
+            </div>
+            <div class="workflow-item">
+                <span class="workflow-step-num">STEP 04</span>
+                <div class="workflow-step-title">Synchronized review</div>
+                <p class="workflow-step-desc">Inspect output side-by-side or with interactive 1:1 split-slider, 3x detail loupe, and objective quality metrics.</p>
+            </div>
         </div>
     </div>
 </div>

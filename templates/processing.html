@@ -3,24 +3,22 @@
 {% block title %}Processing Clip — DashClarity AI{% endblock %}
 
 {% block content %}
-<div style="max-width: 860px; margin: 1rem auto 2rem auto;">
+<div>
     <!-- Active Monitor Deck -->
     <div class="monitor-deck">
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.85rem;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.75rem;">
             <div>
-                <h1 style="font-size: 1.25rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.25rem;">
-                    Enhancement in progress
-                </h1>
-                <p id="stage-text" style="font-size: 0.85rem; color: var(--text-muted);">
+                <h1>Enhancement in progress</h1>
+                <p id="stage-text" style="color: var(--text-muted); font-size: 0.95rem; margin-top: 0.25rem;">
                     <span>Initializing deep learning pipeline...</span>
                 </p>
             </div>
-            <div style="display: flex; align-items: center; gap: 0.5rem;">
-                <span id="status-badge" class="status-badge">
+            <div style="display: flex; align-items: center; gap: 0.6rem;">
+                <span id="status-badge" class="status-badge" style="min-height: 40px; padding: 0.4rem 0.75rem;">
                     <span id="status-dot" class="status-dot"></span>
                     <span id="status-text">Processing</span>
                 </span>
-                <button id="btn-cancel" class="btn btn-danger" style="font-size: 0.78rem; padding: 0.35rem 0.65rem;" onclick="cancelProcessing('{{ job_id }}');">
+                <button id="btn-cancel" class="btn btn-danger" onclick="cancelProcessing('{{ job_id }}');">
                     Cancel job
                 </button>
             </div>

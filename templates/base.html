@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     {% block extra_head %}{% endblock %}
 </head>
-<body>
+<body class="{% if active_page %}page-{{ active_page }}{% endif %}">
     <!-- Top Navigation Bar -->
     <header class="navbar">
         <div class="container navbar-inner">

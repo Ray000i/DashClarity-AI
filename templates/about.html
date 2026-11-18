@@ -3,89 +3,111 @@
 {% block title %}System Limits & Architecture — DashClarity AI{% endblock %}
 
 {% block content %}
-<div style="max-width: 820px; margin: 0 auto;">
+<div>
     <div style="margin-bottom: 2rem;">
-        <h1 style="font-size: 1.35rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.35rem;">
-            System limits and architecture
-        </h1>
-        <p style="font-size: 0.86rem; color: var(--text-muted); line-height: 1.5;">
-            Technical briefing on model stages, hardware execution, physical failure modes, and evidentiary boundaries.
+        <h1>System limits and architecture</h1>
+        <p class="max-ch" style="color: var(--text-muted); font-size: 0.95rem; margin-top: 0.25rem;">
+            Technical briefing on model stages, hardware execution benchmarks, physical failure modes, and evidentiary boundaries.
         </p>
     </div>
 
-    <!-- Pipeline Stages Section -->
-    <div class="card" style="margin-bottom: 1.25rem;">
-        <div class="card-header">
-            <span class="card-title">Pipeline stages</span>
-        </div>
-        <div style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.6;">
-            <p style="margin-bottom: 0.75rem;">
-                <strong style="color: var(--text-primary);">Sensor denoising:</strong>
-                SCUNet neural denoiser loaded via Spandrel removes CMOS noise variance and compression block artifacts before illumination boost to avoid amplifying sensor grain.
-            </p>
-            <p style="margin-bottom: 0.75rem;">
-                <strong style="color: var(--text-primary);">Illumination boost:</strong>
-                Zero-DCE++ estimates dynamic high-order non-linear tone curves without paired reference images. Highlight knee compression protects oncoming headlights from blooming.
-            </p>
-            <p style="margin-bottom: 0.75rem;">
-                <strong style="color: var(--text-primary);">Detail reconstruction:</strong>
-                Real-ESRGAN synthesizes fine edge gradients. Blends twenty-two percent Lanczos reference interpolation to mitigate GAN ringing and halo artifacts around text.
-            </p>
-            <p>
-                <strong style="color: var(--text-primary);">Temporal consistency:</strong>
-                Dense Farneback optical flow estimates inter-frame camera motion vectors to warp prior enhanced frames forward, avoiding ghosting trails across moving roads.
-            </p>
-        </div>
-    </div>
+    <!-- 2-Column Card Grid on Wide Screens -->
+    <div class="about-grid">
+        <!-- Pipeline Stages Section -->
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">Pipeline stages</span>
+            </div>
+            <dl class="about-dl">
+                <dt>1. Sensor denoising (SCUNet)</dt>
+                <dd>
+                    Deep residual Swin-Conv denoiser removes CMOS Poisson-Gaussian noise variance and compression block artifacts before illumination boost to avoid amplifying sensor grain.
+                </dd>
 
-    <!-- Hardware Specifications -->
-    <div class="card" style="margin-bottom: 1.25rem;">
-        <div class="card-header">
-            <span class="card-title">Execution hardware</span>
-        </div>
-        <div style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.6;">
-            <p style="margin-bottom: 0.5rem;">
-                Inference runs locally using PyTorch with CUDA acceleration on dedicated laptop hardware (NVIDIA GeForce RTX 4060 Laptop GPU, 8 GB VRAM).
-            </p>
-            <p>
-                Models execute in half-precision (FP16) tensor format with spatial tiling to keep peak VRAM under 1.5 GB during 720p and 1080p processing.
-            </p>
-        </div>
-    </div>
+                <dt>2. Illumination boost (Zero-DCE++)</dt>
+                <dd>
+                    Estimates dynamic high-order non-linear tone curves without paired reference images. Highlight knee compression protects oncoming headlights from blooming.
+                </dd>
 
-    <!-- Known Physical Limitations -->
-    <div class="card" style="margin-bottom: 1.25rem;">
-        <div class="card-header">
-            <span class="card-title">Known limitations and boundary conditions</span>
-        </div>
-        <div style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.6;">
-            <p style="margin-bottom: 0.75rem;">
-                <strong style="color: var(--text-primary);">Direct headlight glare:</strong>
-                Pixels where the camera CMOS sensor has completely clipped to pure white contain zero underlying spatial information. Deep learning models cannot recover license plates concealed directly within a saturated high-beam glare cone.
-            </p>
-            <p style="margin-bottom: 0.75rem;">
-                <strong style="color: var(--text-primary);">Severe motion blur:</strong>
-                High-speed crossing vehicles that smear across multiple pixels due to slow dashcam exposure times cannot be deblurred if optical flow tracking loses temporal correspondence.
-            </p>
-            <p>
-                <strong style="color: var(--text-primary);">Distant unreadable characters:</strong>
-                When license plate alphanumeric characters occupy fewer than 6 to 8 pixels, generative super-resolution will synthesize plausible character strokes, but these strokes may not match the vehicle's true registration string.
-            </p>
-        </div>
-    </div>
+                <dt>3. Detail reconstruction (Real-ESRGAN)</dt>
+                <dd>
+                    RRDBNet generator synthesizes fine edge gradients. Blends 22% Lanczos reference interpolation to mitigate GAN ringing and halo artifacts around text.
+                </dd>
 
-    <!-- Ethical Boundaries & Legal Note -->
-    <div class="card">
-        <div class="card-header">
-            <span class="card-title">Ethics and legal admissibility</span>
+                <dt>4. Temporal consistency (Dense Farneback flow)</dt>
+                <dd>
+                    Estimates inter-frame camera motion vectors to warp prior enhanced frames forward, eliminating inter-frame flicker and ghosting trails across moving roads.
+                </dd>
+            </dl>
         </div>
-        <div style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.6;">
-            <p style="margin-bottom: 0.75rem;">
-                DashClarity AI is intended solely for investigative review, internal fleet claims triage, and preliminary incident inspection.
-            </p>
-            <p>
-                Under legal rules of evidence, footage processed with generative deep learning is not original recorded evidence. AI upscaling can hallucinate synthetic edge details that were absent in the raw physical recording.
-            </p>
+
+        <!-- Hardware Specifications & Benchmarks -->
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">Execution hardware & benchmarks</span>
+            </div>
+            <dl class="about-dl">
+                <dt>Hardware architecture</dt>
+                <dd>
+                    Inference runs locally using PyTorch with CUDA acceleration on dedicated mobile hardware (NVIDIA GeForce RTX 4060 Laptop GPU, 8 GB VRAM, 115W).
+                </dd>
+
+                <dt>Memory envelope</dt>
+                <dd>
+                    Models execute in half-precision (FP16) tensor format with spatial tiling to keep measured peak VRAM under 735 MB for 720p and under 1.5 GB for 1080p processing.
+                </dd>
+
+                <dt>Measured throughput (RTX 4060)</dt>
+                <dd>
+                    Benchmarked in FP16 at 720p: Fast preset at 20.2 FPS (729 MB VRAM), Balanced preset at 3.5 FPS (729 MB VRAM), and Quality full pipeline at 0.6 FPS (734 MB VRAM).
+                </dd>
+            </dl>
+        </div>
+
+        <!-- Known Physical Limitations -->
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">Known limitations & boundary conditions</span>
+            </div>
+            <dl class="about-dl">
+                <dt>Direct headlight glare</dt>
+                <dd>
+                    Pixels where the camera CMOS sensor has completely clipped to pure white contain zero underlying spatial information. Deep learning models cannot recover license plates concealed directly within a saturated high-beam glare cone.
+                </dd>
+
+                <dt>Severe motion blur</dt>
+                <dd>
+                    High-speed crossing vehicles that smear across multiple pixels due to slow dashcam exposure times cannot be deblurred if optical flow tracking loses temporal correspondence.
+                </dd>
+
+                <dt>Distant unreadable characters</dt>
+                <dd>
+                    When license plate alphanumeric characters occupy fewer than 6 to 8 pixels, generative super-resolution will synthesize plausible character strokes, but these strokes may not match the vehicle's true registration string.
+                </dd>
+            </dl>
+        </div>
+
+        <!-- Ethical Boundaries & Legal Note -->
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">Ethics & legal admissibility</span>
+            </div>
+            <dl class="about-dl">
+                <dt>Investigative intent</dt>
+                <dd>
+                    DashClarity AI is intended solely for investigative review, internal fleet claims triage, and preliminary incident inspection.
+                </dd>
+
+                <dt>Evidentiary rules</dt>
+                <dd>
+                    Under legal rules of evidence, footage processed with generative deep learning is not original recorded evidence. AI upscaling can hallucinate synthetic edge details that were absent in the raw physical recording.
+                </dd>
+
+                <dt>Audit trail requirement</dt>
+                <dd>
+                    Original raw footage must always be archived alongside enhanced outputs with synchronized comparison logs and objective schema metrics.
+                </dd>
+            </dl>
         </div>
     </div>
 </div>

@@ -46,12 +46,48 @@ processing_manager.jobs["demo_processing"] = proc_job
 
 print(f"Using Job ID for results captures: {sample_job_id}")
 
+import tempfile
+
+temp_user_dir = tempfile.mkdtemp()
+
 screens = [
+    # 390px (Mobile phone)
+    ("mobile_390_index.png", "http://127.0.0.1:5000/", 390, 844),
+    ("mobile_390_upload.png", "http://127.0.0.1:5000/upload", 390, 844),
+    ("mobile_390_history.png", "http://127.0.0.1:5000/history", 390, 844),
+    ("mobile_390_about.png", "http://127.0.0.1:5000/about", 390, 844),
+    ("mobile_390_results.png", f"http://127.0.0.1:5000/results/{sample_job_id}", 390, 844),
+
+    # 768px (Tablet)
+    ("tablet_768_index.png", "http://127.0.0.1:5000/", 768, 1024),
+    ("tablet_768_upload.png", "http://127.0.0.1:5000/upload", 768, 1024),
+    ("tablet_768_history.png", "http://127.0.0.1:5000/history", 768, 1024),
+    ("tablet_768_about.png", "http://127.0.0.1:5000/about", 768, 1024),
+
+    # 1280px (Standard laptop)
+    ("desktop_1280_index.png", "http://127.0.0.1:5000/", 1280, 800),
+    ("desktop_1280_upload.png", "http://127.0.0.1:5000/upload", 1280, 800),
+    ("desktop_1280_history.png", "http://127.0.0.1:5000/history", 1280, 800),
+    ("desktop_1280_about.png", "http://127.0.0.1:5000/about", 1280, 800),
+    ("desktop_1280_results.png", f"http://127.0.0.1:5000/results/{sample_job_id}", 1280, 800),
+
+    # 1920px (Desktop Full HD)
+    ("desktop_1920_index.png", "http://127.0.0.1:5000/", 1920, 1080),
+    ("desktop_1920_upload.png", "http://127.0.0.1:5000/upload", 1920, 1080),
+    ("desktop_1920_history.png", "http://127.0.0.1:5000/history", 1920, 1080),
+    ("desktop_1920_about.png", "http://127.0.0.1:5000/about", 1920, 1080),
+
+    # 2560px (Ultrawide / QHD)
+    ("desktop_2560_index.png", "http://127.0.0.1:5000/", 2560, 1440),
+    ("desktop_2560_upload.png", "http://127.0.0.1:5000/upload", 2560, 1440),
+    ("desktop_2560_history.png", "http://127.0.0.1:5000/history", 2560, 1440),
+    ("desktop_2560_about.png", "http://127.0.0.1:5000/about", 2560, 1440),
+
+    # Standard doc screenshots
     ("desktop_01_index.png", "http://127.0.0.1:5000/", 1366, 768),
     ("desktop_02_upload.png", "http://127.0.0.1:5000/upload", 1366, 768),
     ("desktop_03_processing.png", "http://127.0.0.1:5000/processing/demo_processing", 1366, 768),
     ("desktop_04_results.png", f"http://127.0.0.1:5000/results/{sample_job_id}", 1366, 768),
-    ("desktop_04b_results_side.png", f"http://127.0.0.1:5000/results/{sample_job_id}?mode=side", 1366, 768),
     ("desktop_05_history.png", "http://127.0.0.1:5000/history", 1366, 768),
     ("desktop_06_about.png", "http://127.0.0.1:5000/about", 1366, 768),
     ("mobile_01_results.png", f"http://127.0.0.1:5000/results/{sample_job_id}", 390, 844),
@@ -74,6 +110,7 @@ for filename, url, width, height in screens:
         "--headless=new",
         "--disable-gpu",
         "--no-sandbox",
+        f"--user-data-dir={temp_user_dir}",
         f"--window-size={width},{height}",
         f"--screenshot={str(out_path)}",
         "--hide-scrollbars",

@@ -29,42 +29,42 @@
 
 ## 1. Presenting Your Project to the Teacher (Curriculum & Syllabus Defense)
 
-When explaining this project to professors, examiners, or project mentors, **always anchor the architecture directly to the foundational concepts covered in university lecture handouts**.
+When explaining this project to professors, examiners, or project mentors, **always anchor the architecture directly to foundational concepts covered in the course syllabus**.
 
 ### 1.1 Direct 2-Line Answer (Say This First in Your Viva)
-> *"Sir/Ma'am, we built a video enhancement pipeline by combining 3 primary architectures directly from your syllabus:*
-> 1. **Convolutional Neural Networks (CNNs) with Residual Blocks** *(Handout 2.2)*
-> 2. **Deep Autoencoder-Decoder Architecture with Latent Disentanglement** *(Handout 6 & 6.2)*
-> 3. **Generative Adversarial Networks (GANs)** for Super-Resolution *(Handout 7.1 & 7.2)*
+> *"Sir/Ma'am, we built a video enhancement pipeline by combining 3 primary architectures directly from our syllabus:*
+> 1. **Convolutional Neural Networks (CNNs) with Residual Blocks**
+> 2. **Deep Autoencoder-Decoder Architecture with Latent Disentanglement**
+> 3. **Generative Adversarial Networks (GANs)** for Super-Resolution
 >
-> *Additionally, to handle the sequence of frames in video, we used a **Sequential & Cross-Attention mechanism** *(Handout 4)* so that the enhanced video doesn't suffer from temporal flickering."*
+> *Additionally, to handle the sequence of frames in video, we used a **Sequential & Cross-Attention mechanism** so that the enhanced video doesn't suffer from temporal flickering."*
 
 ---
 
-### 1.2 Detailed Concept Breakdown: Handout by Handout
+### 1.2 Core Architectural Principles & Syllabus Alignment
 
-#### 1. Autoencoder & Latent Space Disentanglement *(Handout 6 & 6.2)*
+#### 1. Autoencoder & Latent Space Disentanglement
 * **How it appears in DashClarity AI:**
   The core low-light enhancement engine operates as a **Dual-Decoder Convolutional Autoencoder**.
   $$\text{Input (Dark Frame } I\text{)} \longrightarrow \text{Encoder (Latent Space)} \longrightarrow \begin{cases} \text{Decoder 1} \longrightarrow \text{Reflectance Map } (R) \\ \text{Decoder 2} \longrightarrow \text{Illumination Map } (L) \end{cases}$$
   According to the physical **Retinex Theory**, an image decomposes into intrinsic material reflectance $R$ (asphalt, license plates, car bodies) and variable ambient illumination $L$ ($I = R \odot L$). The encoder compresses the degraded frame into a compact latent bottleneck, and two separate decoder branches disentangle illumination from scene geometry before recombining them into a clean, well-lit frame.
 * **Loss Functions Used:** Charbonnier Loss $\mathcal{L}_{\text{char}}$, Total Variation Loss $\mathcal{L}_{\text{TV}}$ for smooth illumination curves, and Mutual Consistency Loss.
 
-#### 2. CNNs, Convolutions & Residual Blocks *(Handout 2.2)*
+#### 2. CNNs, Convolutions & Residual Blocks
 * **How it appears in DashClarity AI:**
   Throughout the denoising and feature extraction stages (SCUNet / Zero-DCE++):
   * **Convolutions & Receptive Fields:** $3 \times 3$ convolutional filters extract local spatial features (edges, lane markings).
   * **Residual Blocks (Skip Connections):** ResNet-style identity connections ($x + \mathcal{F}(x)$) prevent vanishing gradients during deep feature extraction and allow the network to learn zero-centered residual noise $\mathcal{R}(y) = y - x$.
   * **Sub-Pixel Convolution (PixelShuffle):** Instead of transposed convolutions which suffer from checkerboard artifacts, sub-pixel convolutions are utilized for detail upsampling.
 
-#### 3. Generative Adversarial Networks (GANs) for Super-Resolution *(Handout 7.1 & 7.2)*
+#### 3. Generative Adversarial Networks (GANs) for Super-Resolution
 * **How it appears in DashClarity AI:**
   To reconstruct distant license plates and road signs, DashClarity AI incorporates **Conditional GAN (cGAN) Super-Resolution (Real-ESRGAN)**:
   * **Generator ($G$):** A deep Residual-in-Residual Dense Block (RRDBNet) network that maps low-resolution frames to $2\times / 4\times$ high-resolution space, hallucinating sharp high-frequency edges.
   * **Discriminator ($D$):** A VGG-128 based relativistic discriminator trained to penalize blurry or artificial textures, driving the generator toward natural photographic distributions.
   * **Anti-Ringing Blending:** A Lanczos band-limiting filter prevents high-frequency ringing around sharp text boundaries.
 
-#### 4. Sequential Frame Modeling & Cross-Attention *(Handout 4)*
+#### 4. Sequential Frame Modeling & Cross-Attention
 * **How it appears in DashClarity AI:**
   Frame-independent enhancement causes severe temporal flickering because neural networks predict slightly different illuminations per frame. DashClarity AI incorporates **Sequential Cross-Frame Modeling**:
   * Cross-attention and Farnebäck motion-compensated optical flow warp information from frame $t-1$ to frame $t$, guaranteeing that static road surfaces and moving vehicles maintain photometric stability across consecutive frames.
@@ -72,7 +72,7 @@ When explaining this project to professors, examiners, or project mentors, **alw
 ---
 
 ### 1.3 If the Teacher Asks: *"What is this STCD model?"*
-> *"Sir/Ma'am, **STCD (Spatial-Temporal Consistent Decomposition)** is not a foreign black box. It is the practical implementation of the exact **Convolutional Autoencoder + Cross-Attention mechanism** from your syllabus applied to video sequences. It uses the same CNN layers, Residual blocks, Latent space disentanglement, and Sequence modeling that you taught us, packaged for spatio-temporal video data."*
+> *"Sir/Ma'am, **STCD (Spatial-Temporal Consistent Decomposition)** is not a foreign black box. It is the practical implementation of the exact **Convolutional Autoencoder + Cross-Attention mechanism** from our syllabus applied to video sequences. It uses the same CNN layers, Residual blocks, Latent space disentanglement, and Sequence modeling that you taught us, packaged for spatio-temporal video data."*
 
 ---
 
@@ -80,15 +80,15 @@ When explaining this project to professors, examiners, or project mentors, **alw
 
 When speaking during your project presentation or oral examination, incorporate these keywords naturally:
 
-| Academic Keyword | Handout Ref | Where It Operates in the Project |
+| Academic Keyword | Core Syllabus Topic | Where It Operates in the Project |
 | :--- | :---: | :--- |
-| **Encoder-Decoder Architecture** | Handout 6 | Compresses dark frames to latent space and reconstructs clean frames |
-| **Latent Representation / Disentanglement** | Handout 6 & 6.2 | Separates material reflectance ($R$) from light intensity ($L$) |
-| **Residual Blocks & Skip Connections** | Handout 2.2 | Maintains gradient flow in deep denoising backbones (ResNet / SCUNet) |
-| **Sub-Pixel Convolution (PixelShuffle)** | Handout 2.2 | Checkerboard-free spatial upsampling for video frames |
-| **Generator & Discriminator** | Handout 7.1 & 7.2 | Conditional GAN (Real-ESRGAN) for license plate and signage super-resolution |
-| **Cross-Frame Attention / Sequence Modeling** | Handout 4 | Eliminates temporal flicker between frame $t$ and frame $t+1$ |
-| **Loss Functions** | Handouts 2, 6, 7 | Charbonnier Loss (robust to outliers), Total Variation Loss (smoothness), L1 Loss |
+| **Encoder-Decoder Architecture** | Autoencoders & Latent Spaces | Compresses dark frames to latent space and reconstructs clean frames |
+| **Latent Representation / Disentanglement** | Representation Learning | Separates material reflectance ($R$) from light intensity ($L$) |
+| **Residual Blocks & Skip Connections** | Deep Residual CNNs | Maintains gradient flow in deep denoising backbones (ResNet / SCUNet) |
+| **Sub-Pixel Convolution (PixelShuffle)** | CNN Upsampling Layers | Checkerboard-free spatial upsampling for video frames |
+| **Generator & Discriminator** | Generative Adversarial Networks | Conditional GAN (Real-ESRGAN) for license plate and signage super-resolution |
+| **Cross-Frame Attention / Sequence Modeling** | Sequence & Attention Models | Eliminates temporal flicker between frame $t$ and frame $t+1$ |
+| **Loss Functions** | Deep Learning Objectives | Charbonnier Loss (robust to outliers), Total Variation Loss (smoothness), L1 Loss |
 
 ---
 
@@ -119,16 +119,16 @@ flowchart LR
     D -->|"Super-Resolved"| E["Stage 4: Farnebäck Flow"]
     E --> F["Enhanced Output Frame"]
     
-    subgraph "Handout 6: Autoencoder"
+    subgraph "Autoencoder Decomposition"
         B
     end
-    subgraph "Handout 2.2: Residual CNN"
+    subgraph "Residual CNN Denoising"
         C
     end
-    subgraph "Handout 7: Conditional GAN"
+    subgraph "Conditional GAN Super-Resolution"
         D
     end
-    subgraph "Handout 4: Sequence Modeling"
+    subgraph "Sequential Temporal Modeling"
         E
     end
 ```
@@ -151,7 +151,7 @@ flowchart LR
 
 ## 5. Theoretical Foundation & Mathematical Formulation
 
-### 5.1 Retinex Decomposition (Autoencoder Handout 6)
+### 5.1 Retinex Decomposition (Autoencoder Formulation)
 An observed low-light frame $I(x, y)$ is mathematically decomposed as:
 $$I(x, y) = R(x, y) \odot L(x, y)$$
 where:
@@ -165,7 +165,7 @@ Zero-DCE++ iteratively refines frame luminance via non-linear quadratic curve ma
 $$LE_n(x) = LE_{n-1}(x) + \mathcal{A}_n(x) \cdot LE_{n-1}(x) \cdot (1 - LE_{n-1}(x))$$
 where $\mathcal{A}_n$ is a parameter map predicted by the convolutional network across $n=8$ iterations.
 
-### 5.3 GAN Objective Function (Handout 7)
+### 5.3 GAN Objective Function (Adversarial Training)
 The generative detail reconstruction is trained using a Relativistic Average GAN (RaGAN) objective:
 $$\mathcal{L}_G = \mathcal{L}_{\text{perceptual}} + \lambda_1 \mathcal{L}_{\text{L1}} + \lambda_2 \mathcal{L}_{\text{RaGAN}}$$
 $$\mathcal{L}_{\text{RaGAN}} = -\mathbb{E}_{x_r} \left[ \log(1 - D_{\text{Ra}}(x_r, x_f)) \right] - \mathbb{E}_{x_f} \left[ \log(D_{\text{Ra}}(x_f, x_r)) \right]$$

@@ -5,6 +5,33 @@
 
 ---
 
+## Section 0: Viva Defense Script & Syllabus Alignment
+
+### Direct 2-Line Answer (Say This First When Introducing the Project)
+> *"Sir/Ma'am, we built an end-to-end video enhancement pipeline by combining 3 primary foundational architectures from our deep learning curriculum:*
+> 1. **Convolutional Neural Networks (CNNs) with Residual Blocks (Skip Connections)** for noise extraction
+> 2. **Deep Autoencoder-Decoder Architecture with Latent Disentanglement** for illumination and reflectance separation
+> 3. **Generative Adversarial Networks (GANs)** for Super-Resolution
+>
+> *Additionally, to handle sequential frames in video without flickering, we incorporated a **Sequential Temporal Consistency & Optical Flow mechanism**."*
+
+### Concept Mapping Cheat Sheet
+
+| Core Syllabus Topic | Academic Keyword | Where It Operates in DashClarity AI |
+| :--- | :--- | :--- |
+| **Autoencoders & Latent Spaces** | Encoder-Decoder, Latent Bottleneck | Compresses underexposed frames into latent space; decodes illumination map |
+| **Latent Disentanglement** | Retinex Theory ($I = R \odot L$) | Disentangles intrinsic scene reflectance ($R$) from environmental light ($L$) |
+| **Deep Residual CNNs** | Skip Connections, Residual Learning | Learns residual noise $\mathcal{R}(y) = y - x$ in SCUNet to avoid vanishing gradients |
+| **Sub-Pixel Convolutions** | PixelShuffle | Checkerboard-free spatial upsampling for video frames |
+| **Generative Adversarial Networks** | Generator ($G$), Discriminator ($D$) | Real-ESRGAN (RRDBNet generator + relativistic discriminator) for plate recovery |
+| **Sequence & Attention Models** | Temporal Consistency, Optical Flow | Farnebäck dense flow warps history frames to eliminate inter-frame flicker |
+| **Loss Functions** | Deep Learning Objectives | Charbonnier Loss (robust to outliers), Total Variation (TV) Loss (smoothness) |
+
+### If the Teacher Asks: *"What is this STCD model?"*
+> *"Sir/Ma'am, STCD (Spatial-Temporal Consistent Decomposition) is the video implementation of the **Convolutional Autoencoder + Attention mechanism** from our course syllabus. It applies the same encoder-decoder principles, residual blocks, and cross-frame attention to multi-frame video data."*
+
+---
+
 ### Category 1: Problem Formulation & Architecture Design
 
 #### Q1: What is the primary computer vision problem addressed by DashClarity AI?

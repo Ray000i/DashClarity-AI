@@ -28,9 +28,8 @@
 6. [Repository Directory Structure](#repository-directory-structure)
 7. [Installation & Setup](#installation--setup)
 8. [Running the Application](#running-the-application)
-9. [Academic Documentation & Viva Resources](#academic-documentation--viva-resources)
-10. [Evidentiary & Forensic Disclaimer](#evidentiary--forensic-disclaimer)
-11. [License](#license)
+9. [Evidentiary & Forensic Disclaimer](#evidentiary--forensic-disclaimer)
+10. [License](#license)
 
 ---
 
@@ -283,15 +282,6 @@ http://127.0.0.1:5000
 | <kbd>&larr;</kbd> / <kbd>&rarr;</kbd> | Single-frame backward / forward step |
 | <kbd>S</kbd> | Toggle between Split-Slider and Side-by-Side view |
 | <kbd>L</kbd> | Toggle 3x Detail Loupe Lens |
-
----
-
-## Academic Documentation & Viva Resources
-
-For oral examination preparation, project reports, and slide decks, see the dedicated guides under `docs/`:
-* 📘 **[Viva Voce Preparation & Syllabus Defense Guide](docs/VIVA_QA.md):** 20+ detailed questions & answers, presentation scripts, and syllabus concept breakdowns.
-* 📑 **[Comprehensive Technical Project Report](docs/REPORT.md):** Formal academic report detailing problem formulation, ablations, failure modes, and mathematical derivations.
-* 🖥️ **[Slide-by-Slide Presentation Outline](docs/PRESENTATION_OUTLINE.md):** Deck structure for final semester reviews.
 
 ---
 

@@ -50,43 +50,55 @@ def get_pyiqa_metric(name: str):
     return None
 
 
-def compute_flat_region_noise(img_bgr: np.ndarray) -> float:
+def compute_flat_region_noise(img_bgr: np.ndarray) -> Optional[float]:
     """Measures sensor noise standard deviation strictly on non-clipped, flat textureless regions."""
-    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY).astype(np.float32)
-    grad_x = cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3)
-    grad_y = cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3)
-    grad_mag = np.sqrt(grad_x**2 + grad_y**2)
+    try:
+        gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY).astype(np.float32)
+        grad_x = cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3)
+        grad_y = cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3)
+        grad_mag = np.sqrt(grad_x**2 + grad_y**2)
 
-    # Flat, non-saturated mask: 15 < gray < 235 and gradient magnitude < 4.0
-    flat_mask = (gray > 15.0) & (gray < 235.0) & (grad_mag < 4.0)
-    if np.sum(flat_mask) < 200:
-        return float(cv2.Laplacian(gray, cv2.CV_64F).std())
+        # Flat, non-saturated mask: 15 < gray < 235 and gradient magnitude < 4.0
+        flat_mask = (gray > 15.0) & (gray < 235.0) & (grad_mag < 4.0)
+        if np.sum(flat_mask) < 200:
+            return float(cv2.Laplacian(gray, cv2.CV_64F).std())
 
-    # High-pass residual via median filter difference
-    gray_u8 = gray.astype(np.uint8)
-    median_blur = cv2.medianBlur(gray_u8, 5).astype(np.float32)
-    noise_res = gray - median_blur
-    return float(np.std(noise_res[flat_mask]))
+        # High-pass residual via median filter difference
+        gray_u8 = gray.astype(np.uint8)
+        median_blur = cv2.medianBlur(gray_u8, 5).astype(np.float32)
+        noise_res = gray - median_blur
+        return float(np.std(noise_res[flat_mask]))
+    except Exception as e:
+        logger.warning("Noise calculation error: %s", e)
+        return None
 
 
-def compute_sky_luminance_ratio(raw_bgr: np.ndarray, enh_bgr: np.ndarray) -> float:
+def compute_sky_luminance_ratio(raw_bgr: np.ndarray, enh_bgr: np.ndarray) -> Optional[float]:
     """Computes ratio of mean luminance in top 25% sky region (out / in)."""
-    h = raw_bgr.shape[0]
-    sky_h = max(1, int(h * 0.25))
-    raw_sky = float(np.mean(cv2.cvtColor(raw_bgr[:sky_h, :], cv2.COLOR_BGR2GRAY)))
-    enh_sky = float(np.mean(cv2.cvtColor(enh_bgr[:sky_h, :], cv2.COLOR_BGR2GRAY)))
-    return float(enh_sky / (raw_sky + 1e-5))
+    try:
+        h = raw_bgr.shape[0]
+        sky_h = max(1, int(h * 0.25))
+        raw_sky = float(np.mean(cv2.cvtColor(raw_bgr[:sky_h, :], cv2.COLOR_BGR2GRAY)))
+        enh_sky = float(np.mean(cv2.cvtColor(enh_bgr[:sky_h, :], cv2.COLOR_BGR2GRAY)))
+        return float(enh_sky / (raw_sky + 1e-5))
+    except Exception as e:
+        logger.warning("Sky ratio calculation error: %s", e)
+        return None
 
 
-def compute_bloom_area_ratio(raw_bgr: np.ndarray, enh_bgr: np.ndarray) -> float:
+def compute_bloom_area_ratio(raw_bgr: np.ndarray, enh_bgr: np.ndarray) -> Optional[float]:
     """Computes ratio of pixels with Y >= 240 (headlight/specular bloom out / in)."""
-    raw_y = cv2.cvtColor(raw_bgr, cv2.COLOR_BGR2YCrCb)[:, :, 0]
-    enh_y = cv2.cvtColor(enh_bgr, cv2.COLOR_BGR2YCrCb)[:, :, 0]
-    raw_bloom = int(np.sum(raw_y >= 240))
-    enh_bloom = int(np.sum(enh_y >= 240))
-    if raw_bloom == 0:
-        return 1.0 if enh_bloom == 0 else float(enh_bloom)
-    return float(enh_bloom / raw_bloom)
+    try:
+        raw_y = cv2.cvtColor(raw_bgr, cv2.COLOR_BGR2YCrCb)[:, :, 0]
+        enh_y = cv2.cvtColor(enh_bgr, cv2.COLOR_BGR2YCrCb)[:, :, 0]
+        raw_bloom = int(np.sum(raw_y >= 240))
+        enh_bloom = int(np.sum(enh_y >= 240))
+        if raw_bloom == 0:
+            return 1.0 if enh_bloom == 0 else float(enh_bloom)
+        return float(enh_bloom / raw_bloom)
+    except Exception as e:
+        logger.warning("Bloom ratio calculation error: %s", e)
+        return None
 
 
 def evaluate_video_metrics(
@@ -128,23 +140,30 @@ def evaluate_video_metrics(
         compute_bloom_area_ratio(sample_orig_frames[i], sample_enh_frames[i])
         for i in range(num_samples)
     ]
-    avg_sky_ratio = float(np.mean(sky_ratios)) if sky_ratios else 1.0
-    avg_bloom_ratio = float(np.mean(bloom_ratios)) if bloom_ratios else 1.0
+    valid_sky = [r for r in sky_ratios if r is not None]
+    valid_bloom = [r for r in bloom_ratios if r is not None]
+    avg_sky_ratio = float(np.mean(valid_sky)) if valid_sky else None
+    avg_bloom_ratio = float(np.mean(valid_bloom)) if valid_bloom else None
 
     # 3. Flat region sensor noise
     raw_flat_noises = [compute_flat_region_noise(f) for f in sample_orig_frames[:num_samples]]
     enh_flat_noises = [compute_flat_region_noise(f) for f in sample_enh_frames[:num_samples]]
-    avg_raw_flat_noise = float(np.mean(raw_flat_noises)) if raw_flat_noises else 0.0
-    avg_enh_flat_noise = float(np.mean(enh_flat_noises)) if enh_flat_noises else 0.0
+    valid_raw_noise = [n for n in raw_flat_noises if n is not None]
+    valid_enh_noise = [n for n in enh_flat_noises if n is not None]
+    avg_raw_flat_noise = float(np.mean(valid_raw_noise)) if valid_raw_noise else None
+    avg_enh_flat_noise = float(np.mean(valid_enh_noise)) if valid_enh_noise else None
 
     # 4. Normalized Temporal Flicker: E[|I(t) - I(t-1)|] / mean_lum
-    norm_flicker_val = 0.0
-    if num_samples >= 2:
-        diffs = [
-            float(np.mean(np.abs(enh_grays[i] - enh_grays[i - 1])))
-            for i in range(1, num_samples)
-        ]
-        norm_flicker_val = float(np.mean(diffs) / (enh_lum_mean + 1e-5))
+    norm_flicker_val = None
+    try:
+        if num_samples >= 2:
+            diffs = [
+                float(np.mean(np.abs(enh_grays[i] - enh_grays[i - 1])))
+                for i in range(1, num_samples)
+            ]
+            norm_flicker_val = float(np.mean(diffs) / (enh_lum_mean + 1e-5))
+    except Exception as e:
+        logger.warning("Flicker calculation error: %s", e)
 
     # 5. NIQE & BRISQUE
     niqe_score = None
@@ -219,9 +238,9 @@ def evaluate_video_metrics(
             "direction": "lower_better",
             "caveat": "Luminance ratio in upper 25% field of view; higher values indicate night sky haze amplification.",
             "input": 1.0,
-            "output": round(avg_sky_ratio, 2),
-            "change": format_diff(1.0, round(avg_sky_ratio, 2)),
-            "evaluation": evaluate_change("lower_better", 1.0, round(avg_sky_ratio, 2))
+            "output": round(avg_sky_ratio, 2) if avg_sky_ratio is not None else "not available",
+            "change": format_diff(1.0, round(avg_sky_ratio, 2)) if avg_sky_ratio is not None else "not available",
+            "evaluation": evaluate_change("lower_better", 1.0, round(avg_sky_ratio, 2)) if avg_sky_ratio is not None else "neutral"
         },
         {
             "id": "bloom_ratio",
@@ -230,9 +249,9 @@ def evaluate_video_metrics(
             "direction": "lower_better",
             "caveat": "Ratio of saturated specular pixels (Y >= 240); lower or equal ratio indicates controlled glare without blooming.",
             "input": 1.0,
-            "output": round(avg_bloom_ratio, 2),
-            "change": format_diff(1.0, round(avg_bloom_ratio, 2)),
-            "evaluation": evaluate_change("lower_better", 1.0, round(avg_bloom_ratio, 2))
+            "output": round(avg_bloom_ratio, 2) if avg_bloom_ratio is not None else "not available",
+            "change": format_diff(1.0, round(avg_bloom_ratio, 2)) if avg_bloom_ratio is not None else "not available",
+            "evaluation": evaluate_change("lower_better", 1.0, round(avg_bloom_ratio, 2)) if avg_bloom_ratio is not None else "neutral"
         },
         {
             "id": "rms_contrast",
@@ -251,10 +270,10 @@ def evaluate_video_metrics(
             "unit": "",
             "direction": "lower_better",
             "caveat": "High-pass residual variance measured strictly over textureless road and sky zones to exclude edge detail.",
-            "input": round(avg_raw_flat_noise, 2),
-            "output": round(avg_enh_flat_noise, 2),
-            "change": format_diff(round(avg_raw_flat_noise, 2), round(avg_enh_flat_noise, 2)),
-            "evaluation": evaluate_change("lower_better", round(avg_raw_flat_noise, 2), round(avg_enh_flat_noise, 2))
+            "input": round(avg_raw_flat_noise, 2) if avg_raw_flat_noise is not None else "not available",
+            "output": round(avg_enh_flat_noise, 2) if avg_enh_flat_noise is not None else "not available",
+            "change": format_diff(avg_raw_flat_noise, avg_enh_flat_noise),
+            "evaluation": evaluate_change("lower_better", avg_raw_flat_noise, avg_enh_flat_noise)
         },
         {
             "id": "norm_flicker",
@@ -263,7 +282,7 @@ def evaluate_video_metrics(
             "direction": "lower_better",
             "caveat": "Frame-to-frame mean absolute difference normalized by scene luminance; lower score indicates steady playback.",
             "input": "not available",
-            "output": round(norm_flicker_val, 4),
+            "output": round(norm_flicker_val, 4) if norm_flicker_val is not None else "not available",
             "change": "not available",
             "evaluation": "neutral"
         },
@@ -346,12 +365,12 @@ def evaluate_video_metrics(
             "contrast_improvement_index": round(enh_rms_contrast / (raw_rms_contrast + 1e-5), 2),
             "contrast_rms_original": round(raw_rms_contrast, 2),
             "contrast_rms_enhanced": round(enh_rms_contrast, 2),
-            "sky_luminance_ratio": round(avg_sky_ratio, 2),
-            "bloom_area_ratio": round(avg_bloom_ratio, 2),
-            "flat_noise_original": round(avg_raw_flat_noise, 2),
-            "flat_noise_enhanced": round(avg_enh_flat_noise, 2),
-            "temporal_stability_index": round(max(0.0, 100.0 - (norm_flicker_val * 100.0)), 1),
-            "temporal_flicker_score": round(norm_flicker_val, 4)
+            "sky_luminance_ratio": round(avg_sky_ratio, 2) if avg_sky_ratio is not None else "not available",
+            "bloom_area_ratio": round(avg_bloom_ratio, 2) if avg_bloom_ratio is not None else "not available",
+            "flat_noise_original": round(avg_raw_flat_noise, 2) if avg_raw_flat_noise is not None else "not available",
+            "flat_noise_enhanced": round(avg_enh_flat_noise, 2) if avg_enh_flat_noise is not None else "not available",
+            "temporal_stability_index": round(max(0.0, 100.0 - (norm_flicker_val * 100.0)), 1) if norm_flicker_val is not None else "not available",
+            "temporal_flicker_score": round(norm_flicker_val, 4) if norm_flicker_val is not None else "not available"
         },
         "no_reference_quality": {
             "niqe": niqe_score,

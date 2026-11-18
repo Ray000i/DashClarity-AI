@@ -1,7 +1,7 @@
 """
 DashClarity AI - Video Processor Coordinator
-Manages asynchronous enhancement jobs, streaming frame processing, thread-safe progress reporting,
-real-time execution logs, side-by-side comparison rendering, and job history.
+Manages asynchronous enhancement jobs, thread-safe progress reporting,
+real-time execution logs, side-by-side comparison rendering, job history, and single-GPU queueing.
 """
 
 import os
@@ -11,19 +11,31 @@ import shutil
 import logging
 import threading
 import subprocess
+import queue
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple
 
 import cv2
 import numpy as np
 
-from config import UPLOAD_DIR, OUTPUT_DIR, DEFAULT_MAX_FRAMES
+import config
 from src.pipeline.enhancer import VideoEnhancementPipeline
 from src.pipeline.video_stream import StreamingVideoProcessor
 from src.utils.metrics import evaluate_video_metrics
 from src.utils import get_ffmpeg_binary
 
 logger = logging.getLogger("DashClarity.Processor")
+
+TEST_JOB_PREFIXES = ("test_", "sample", "clip_test", "night_upload", "cli_test", "dummy")
+
+
+def is_test_job(job_id: str, clip_name: str) -> bool:
+    jid = job_id.lower()
+    cname = clip_name.lower()
+    return any(
+        jid.startswith(p) or cname.startswith(p) or f"_{p}" in jid or f"_{p}" in cname
+        for p in TEST_JOB_PREFIXES
+    )
 
 
 class JobState:
@@ -33,8 +45,8 @@ class JobState:
         self.input_path = input_path
         self.output_path = None
         self.comparison_path = None
-        self.status = "queued"  # queued, initializing, processing_frames, reconstructing, completed, failed, cancelled
-        self.current_stage = "Queued in processing pipeline"
+        self.status = "ready"  # ready, queued, initializing, processing_frames, reconstructing, completed, failed, cancelled
+        self.current_stage = "Uploaded and ready for enhancement"
         self.progress_percent = 0.0
         self.frames_processed = 0
         self.total_frames = 0
@@ -45,10 +57,11 @@ class JobState:
         self.error_message = None
         self.audio_warning = None
         self.cancel_requested = False
+        self.queue_position = 0
         self.metrics = {}
         self.logs: List[str] = []
         self.lock = threading.Lock()
-        self.add_log("Job initialized and queued.")
+        self.add_log("Job initialized and ready.")
 
     def add_log(self, message: str):
         with self.lock:
@@ -75,6 +88,7 @@ class JobState:
                 "current_fps": round(self.current_fps, 2),
                 "eta_seconds": round(self.eta_seconds, 1),
                 "elapsed_seconds": round(self.elapsed_seconds, 1),
+                "queue_position": self.queue_position,
                 "error": self.error_message,
                 "audio_warning": self.audio_warning,
                 "metrics": self.metrics,
@@ -98,6 +112,31 @@ class ProcessingManager:
         self.jobs_lock = threading.Lock()
         self.pipeline = None
 
+        # GPU Job Queue for single-GPU safe serial processing
+        self.job_queue: queue.Queue = queue.Queue()
+        self.worker_thread: Optional[threading.Thread] = None
+        self.active_job_id: Optional[str] = None
+        self._shutdown_event = threading.Event()
+
+        # Clean up any leftover temporary files from prior interrupted runs
+        self._cleanup_interrupted_artifacts()
+
+    def _cleanup_interrupted_artifacts(self):
+        """Cleans orphaned .temp_* files left by interrupted processes or server restarts."""
+        try:
+            for temp_file in config.OUTPUT_DIR.glob("*.temp_*"):
+                try:
+                    temp_file.unlink()
+                except OSError:
+                    pass
+            for log_file in config.OUTPUT_DIR.glob("*.ffmpeg.log"):
+                try:
+                    log_file.unlink()
+                except OSError:
+                    pass
+        except Exception as e:
+            logger.warning("Error cleaning temporary artifacts: %s", e)
+
     def get_pipeline(self) -> VideoEnhancementPipeline:
         if self.pipeline is None:
             self.pipeline = VideoEnhancementPipeline()
@@ -106,17 +145,29 @@ class ProcessingManager:
     def get_job(self, job_id: str) -> Optional[JobState]:
         with self.jobs_lock:
             if job_id in self.jobs:
-                return self.jobs[job_id]
+                job = self.jobs[job_id]
+                # Check for dead worker thread while job was supposed to be running
+                if (
+                    job.status in ["initializing", "processing_frames", "reconstructing"]
+                    and (self.worker_thread is None or not self.worker_thread.is_alive())
+                    and self.active_job_id != job_id
+                ):
+                    job.update(
+                        status="failed",
+                        error_message="Worker thread terminated unexpectedly.",
+                        current_stage="Processing failed: Worker thread died unexpectedly."
+                    )
+                return job
 
             # Check if completed video exists on disk from prior run
-            out_candidate = OUTPUT_DIR / f"enhanced_{job_id}.mp4"
-            metrics_candidate = OUTPUT_DIR / f"enhanced_{job_id}.json"
-            comp_candidate = OUTPUT_DIR / f"comparison_{job_id}.mp4"
+            out_candidate = config.OUTPUT_DIR / f"enhanced_{job_id}.mp4"
+            metrics_candidate = config.OUTPUT_DIR / f"enhanced_{job_id}.json"
+            comp_candidate = config.OUTPUT_DIR / f"comparison_{job_id}.mp4"
 
             if out_candidate.exists():
-                input_matches = list(UPLOAD_DIR.glob(f"*{job_id}*"))
+                input_matches = list(config.UPLOAD_DIR.glob(f"*{job_id}*"))
                 if not input_matches:
-                    input_matches = list(UPLOAD_DIR.glob("sample_*.mp4"))
+                    input_matches = list(config.UPLOAD_DIR.glob("sample_*.mp4"))
                 input_path = str(input_matches[0]) if input_matches else str(out_candidate)
 
                 job = JobState(job_id, input_path)
@@ -127,7 +178,6 @@ class ProcessingManager:
                 job.progress_percent = 100.0
                 job.current_stage = "Enhancement complete. Ready for review and download."
 
-                # Read authentic metrics from disk metrics.json
                 if metrics_candidate.exists():
                     try:
                         with open(metrics_candidate, "r", encoding="utf-8") as f:
@@ -159,10 +209,46 @@ class ProcessingManager:
             return True
         return False
 
+    def delete_job(self, job_id: str) -> bool:
+        """Deletes all generated artifacts and uploaded files associated with a job."""
+        with self.jobs_lock:
+            job = self.jobs.pop(job_id, None)
+
+        files_to_remove = [
+            config.OUTPUT_DIR / f"enhanced_{job_id}.mp4",
+            config.OUTPUT_DIR / f"enhanced_{job_id}.json",
+            config.OUTPUT_DIR / f"comparison_{job_id}.mp4",
+            config.OUTPUT_DIR / f"thumb_{job_id}.jpg"
+        ]
+        files_to_remove.extend(config.UPLOAD_DIR.glob(f"*{job_id}*"))
+
+        deleted_any = False
+        for f in files_to_remove:
+            if f.exists():
+                try:
+                    f.unlink()
+                    deleted_any = True
+                except OSError as e:
+                    logger.warning("Could not delete %s: %s", f, e)
+
+        return deleted_any or (job is not None)
+
+    def get_queue_position(self, job_id: str) -> int:
+        """Returns 1-based queue position. 0 if currently active or completed."""
+        if self.active_job_id == job_id:
+            return 0
+        # Count position in current queue
+        pos = 1 if self.active_job_id is not None else 0
+        items = list(self.job_queue.queue)
+        for idx, item in enumerate(items):
+            if item[0].job_id == job_id:
+                return pos + idx + 1
+        return 0
+
     def start_enhancement_async(
         self,
         job_id: str,
-        preset: str = "full",
+        preset: str = "balanced",
         strength: float = 1.0,
         max_seconds: Optional[float] = None,
         frame_skip: int = 1,
@@ -174,19 +260,65 @@ class ProcessingManager:
         if not job:
             raise ValueError(f"Job {job_id} not found.")
 
-        # Backwards compatibility for legacy calls
+        # Prevent double submit
+        if job.status in ["queued", "initializing", "processing_frames", "reconstructing"]:
+            logger.info("Job %s is already active in state '%s'", job_id, job.status)
+            return
+
         if "max_frames" in kwargs and max_seconds is None:
             max_seconds = float(kwargs["max_frames"]) / 30.0
-        if "super_res" in kwargs and not kwargs["super_res"]:
-            if preset == "full":
-                preset = "low_light"
 
-        thread = threading.Thread(
-            target=self._run_pipeline,
-            args=(job, preset, strength, max_seconds, frame_skip, restore_at_original_res, stage_overrides),
-            daemon=True
+        # Calculate initial queue position
+        q_pos = self.get_queue_position(job_id)
+        job.update(
+            status="queued",
+            current_stage=f"Queued for processing (Queue position: {max(1, q_pos)})...",
+            queue_position=max(1, q_pos)
         )
-        thread.start()
+        job.add_log(f"Enqueued in GPU enhancement queue (Preset: {preset}).")
+
+        self.job_queue.put((
+            job, preset, strength, max_seconds, frame_skip, restore_at_original_res, stage_overrides
+        ))
+
+        self._ensure_worker_running()
+
+    def _ensure_worker_running(self):
+        if self.worker_thread is None or not self.worker_thread.is_alive():
+            self.worker_thread = threading.Thread(target=self._queue_worker, daemon=True, name="DashClarity-GPUWorker")
+            self.worker_thread.start()
+
+    def _queue_worker(self):
+        """Serial GPU queue worker thread. Executes one enhancement job at a time."""
+        logger.info("GPU Queue Worker started.")
+        while not self._shutdown_event.is_set():
+            try:
+                task = self.job_queue.get(timeout=2.0)
+            except queue.Empty:
+                continue
+
+            job, preset, strength, max_seconds, frame_skip, restore_at_original_res, stage_overrides = task
+            self.active_job_id = job.job_id
+            job.update(queue_position=0)
+
+            try:
+                if not job.cancel_requested:
+                    self._run_pipeline(
+                        job, preset, strength, max_seconds, frame_skip, restore_at_original_res, stage_overrides
+                    )
+                else:
+                    job.update(status="cancelled", current_stage="Job cancelled before execution started.")
+                    job.add_log("Job cancelled while queued.")
+            except Exception as e:
+                logger.exception("Unexpected error executing job %s: %s", job.job_id, e)
+                job.update(
+                    status="failed",
+                    error_message=str(e),
+                    current_stage=f"Processing failed: {str(e)}"
+                )
+            finally:
+                self.active_job_id = None
+                self.job_queue.task_done()
 
     def _run_pipeline(
         self,
@@ -207,8 +339,8 @@ class ProcessingManager:
         job.add_log(f"Starting pipeline with preset: {preset}, blend strength: {strength:.2f}")
 
         output_filename = f"enhanced_{job.job_id}.mp4"
-        final_output_path = OUTPUT_DIR / output_filename
-        metrics_json_path = OUTPUT_DIR / f"enhanced_{job.job_id}.json"
+        final_output_path = config.OUTPUT_DIR / output_filename
+        metrics_json_path = config.OUTPUT_DIR / f"enhanced_{job.job_id}.json"
 
         try:
             pipeline = self.get_pipeline()
@@ -229,7 +361,10 @@ class ProcessingManager:
                 current_stage=f"Executing {preset} pipeline ({streamer.fps:.1f} FPS target)...",
                 progress_percent=5.0
             )
-            job.add_log(f"Ingested stream: {streamer.in_width}x{streamer.in_height} @ {streamer.fps:.1f} FPS ({streamer.total_target_frames} frames to process)")
+            job.add_log(
+                f"Ingested stream: {streamer.in_width}x{streamer.in_height} @ {streamer.fps:.1f} FPS "
+                f"({streamer.total_target_frames} frames to process)"
+            )
             if streamer.audio_extracted:
                 job.add_log("Audio stream detected and extracted for final multiplexing.")
             else:
@@ -251,7 +386,7 @@ class ProcessingManager:
                 )
                 done = telemetry["frames_processed"]
                 if done - last_log_frame >= 60 or done == streamer.total_target_frames:
-                    job.add_log(f"Processed {done}/{streamer.total_target_frames} frames ({telemetry['fps']:.1f} FPS, ETA: {telemetry['eta_seconds']:.1f}s)")
+                    job.add_log(f"Processed {done}/{streamer.total_target_frames} frames ({telemetry['fps']:.2f} FPS, ETA: {telemetry['eta_seconds']:.1f}s)")
                     last_log_frame = done
 
             def frame_fn(frame, prev):
@@ -310,12 +445,17 @@ class ProcessingManager:
                 metrics=real_metrics,
                 audio_warning=result_info.get("audio_warning")
             )
-            job.add_log(f"Job completed successfully in {result_info['total_time_seconds']:.2f}s ({result_info['processing_fps']:.1f} FPS avg).")
+            job.add_log(f"Job completed successfully in {result_info['total_time_seconds']:.2f}s ({result_info['processing_fps']:.2f} FPS avg).")
             logger.info("Job %s completed successfully in %.2fs", job.job_id, result_info["total_time_seconds"])
 
         except KeyboardInterrupt:
             job.update(status="cancelled", current_stage="Job cancelled by user.")
             job.add_log("Job was cancelled by the user.")
+            if final_output_path.exists():
+                try:
+                    final_output_path.unlink()
+                except OSError:
+                    pass
         except Exception as e:
             logger.exception("Pipeline error in job %s: %s", job.job_id, e)
             job.add_log(f"Error during processing: {str(e)}")
@@ -326,14 +466,12 @@ class ProcessingManager:
             )
 
     def generate_comparison_clip(self, job_id: str) -> Optional[str]:
-        """
-        Creates a synchronized side-by-side MP4 comparison using FFmpeg hstack.
-        """
+        """Creates a synchronized side-by-side MP4 comparison using FFmpeg hstack."""
         job = self.get_job(job_id)
         if not job or not job.output_path or not os.path.exists(job.output_path):
             return None
 
-        comp_path = OUTPUT_DIR / f"comparison_{job_id}.mp4"
+        comp_path = config.OUTPUT_DIR / f"comparison_{job_id}.mp4"
         if comp_path.exists() and comp_path.stat().st_size > 1000:
             job.comparison_path = str(comp_path)
             return str(comp_path)
@@ -368,7 +506,7 @@ class ProcessingManager:
 
     def get_or_create_thumbnail(self, job_id: str) -> Optional[str]:
         """Extracts and saves a 320x180 JPG thumbnail for history listings."""
-        thumb_path = OUTPUT_DIR / f"thumb_{job_id}.jpg"
+        thumb_path = config.OUTPUT_DIR / f"thumb_{job_id}.jpg"
         if thumb_path.exists():
             return str(thumb_path)
 
@@ -384,7 +522,6 @@ class ProcessingManager:
         if not cap.isOpened():
             return None
 
-        # Sample at 1 second or first available frame
         total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         target_f = min(30, max(0, total - 1))
         cap.set(cv2.CAP_PROP_POS_FRAMES, target_f)
@@ -398,18 +535,21 @@ class ProcessingManager:
 
         return None
 
-    def list_history(self) -> List[Dict[str, Any]]:
-        """Returns all completed past enhancement jobs sorted chronologically."""
+    def list_history(self, show_all: bool = False) -> List[Dict[str, Any]]:
+        """Returns completed past enhancement jobs. Hides test jobs unless show_all=True."""
         history_items = []
-        enhanced_files = list(OUTPUT_DIR.glob("enhanced_*.mp4"))
+        enhanced_files = list(config.OUTPUT_DIR.glob("enhanced_*.mp4"))
         enhanced_files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
 
         for enh_file in enhanced_files:
             job_id = enh_file.stem.replace("enhanced_", "")
-            json_file = OUTPUT_DIR / f"enhanced_{job_id}.json"
+            json_file = config.OUTPUT_DIR / f"enhanced_{job_id}.json"
 
-            input_matches = list(UPLOAD_DIR.glob(f"*{job_id}*"))
+            input_matches = list(config.UPLOAD_DIR.glob(f"*{job_id}*"))
             orig_name = Path(input_matches[0]).stem.replace(f"{job_id}_", "") if input_matches else f"clip_{job_id[:8]}"
+
+            if not show_all and is_test_job(job_id, orig_name):
+                continue
 
             metrics = {}
             if json_file.exists():
@@ -423,13 +563,23 @@ class ProcessingManager:
             created_dt = time.strftime("%b %d, %H:%M", time.localtime(enh_file.stat().st_mtime))
             self.get_or_create_thumbnail(job_id)
 
+            proc_time = tech.get("total_processing_time_sec")
+            raw_fps = tech.get("processing_fps")
+            if (raw_fps is None or raw_fps <= 0) and proc_time and proc_time > 0:
+                frames = tech.get("total_frames_processed", 0)
+                if frames > 0:
+                    raw_fps = frames / proc_time
+
+            fps_display = f"{raw_fps:.2f} FPS" if (raw_fps is not None and raw_fps > 0) else "--"
+            duration_display = f"{proc_time:.2f}s" if proc_time is not None else "--"
+
             history_items.append({
                 "job_id": job_id,
                 "clip_name": orig_name,
                 "created_at": created_dt,
                 "resolution": tech.get("enhanced_resolution", "720p"),
-                "duration": f"{tech.get('total_processing_time_sec', 0):.1f}s processed",
-                "fps": f"{tech.get('processing_fps', 0):.1f} FPS" if tech.get("processing_fps") else "--",
+                "duration": f"{duration_display} Processing time",
+                "fps": fps_display,
                 "condition": tech.get("scene_lighting_condition", "Low-light scene"),
                 "thumbnail_url": f"/media/thumbnail/{job_id}",
                 "result_url": f"/results/{job_id}",

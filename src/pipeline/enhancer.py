@@ -22,6 +22,7 @@ from src.pipeline.stages import (
     SuperResolutionStage,
     TemporalSmoothingStage
 )
+from src.pipeline.tiling import GPUOutOfMemoryFallback
 
 logger = logging.getLogger("DashClarity.Pipeline.Enhancer")
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -121,8 +122,51 @@ class VideoEnhancementPipeline:
         restore_at_original_res: Optional[bool] = None
     ) -> Tuple[np.ndarray, Dict[str, Any]]:
         """
-        Processes a single video frame through the active pipeline stages.
+        Processes a single video frame through the active pipeline stages with GPU OOM fallback.
         """
+        try:
+            return self._enhance_frame_internal(
+                frame_bgr=frame_bgr,
+                frame_neighbor=frame_neighbor,
+                preset=preset,
+                strength=strength,
+                restore_at_original_res=restore_at_original_res
+            )
+        except (torch.cuda.OutOfMemoryError, GPUOutOfMemoryFallback) as oom_err:
+            torch.cuda.empty_cache()
+            curr = preset or self.current_preset
+            logger.warning("GPU OOM encountered with preset '%s': %s. Activating safety fallback.", curr, oom_err)
+
+            # Demote preset based on hierarchy: quality -> balanced -> fast
+            if curr in ("quality", "full"):
+                fallback_preset = "balanced"
+            elif curr == "balanced":
+                fallback_preset = "fast"
+            else:
+                fallback_preset = "fast"
+
+            logger.warning("Demoted preset from '%s' to '%s' to prevent crash.", curr, fallback_preset)
+            self.current_preset = fallback_preset
+            self._load_models_for_preset(fallback_preset)
+
+            res, telemetry = self._enhance_frame_internal(
+                frame_bgr=frame_bgr,
+                frame_neighbor=frame_neighbor,
+                preset=fallback_preset,
+                strength=strength,
+                restore_at_original_res=restore_at_original_res
+            )
+            telemetry["gpu_oom_fallback"] = f"Demoted from {curr} to {fallback_preset}"
+            return res, telemetry
+
+    def _enhance_frame_internal(
+        self,
+        frame_bgr: np.ndarray,
+        frame_neighbor: Optional[np.ndarray] = None,
+        preset: Optional[str] = None,
+        strength: float = 1.0,
+        restore_at_original_res: Optional[bool] = None
+    ) -> Tuple[np.ndarray, Dict[str, Any]]:
         if preset and preset != self.current_preset:
             self.current_preset = preset
             self._load_models_for_preset(preset)

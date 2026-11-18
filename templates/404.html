@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}Page Not Found - DashClarity AI{% endblock %}
+
+{% block content %}
+<section class="error-section" style="text-align: center; padding: 64px 0;">
+    <div class="card" style="max-width: 600px; margin: 0 auto; padding: 40px 24px;">
+        <div style="font-size: 56px; font-weight: 700; color: var(--accent-blue); line-height: 1; margin-bottom: 16px;">404</div>
+        <h1 style="font-size: 24px; margin-bottom: 12px;">Resource Not Found</h1>
+        <p style="color: var(--text-dim); margin-bottom: 28px; line-height: 1.6;">
+            The requested page, video artifact, or processing job could not be located on the server.
+        </p>
+        <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">Return Home</a>
+            <a href="{{ url_for('upload_page') }}" class="btn btn-primary">Upload Clip</a>
+            <a href="{{ url_for('history_page') }}" class="btn btn-secondary">Review History</a>
+        </div>
+    </div>
+</section>
+{% endblock %}

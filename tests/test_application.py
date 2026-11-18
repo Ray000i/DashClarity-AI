@@ -8,30 +8,41 @@ Validates all Section 9 Testing Requirements:
 5. Invalid video file
 6. Video without audio
 7. REST API route handling & error responses
+
+Isolated to temporary storage directory via TEST_MODE.
 """
 
 import os
 import sys
 import time
 import json
+import shutil
+import tempfile
 import unittest
+from pathlib import Path
 import numpy as np
 import cv2
 
-# Set path
+# Set path and TEST_MODE prior to any app imports
 sys.path.insert(0, os.path.abspath("."))
+os.environ["TEST_MODE"] = "1"
 
+import config
 from app import app
 from src.metadata import extract_video_metadata
 from src.video_processor import ProcessingManager
 
+
 class DashClarityTestSuite(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        """Prepare sample videos for all required test conditions."""
+        """Prepare sample videos in an isolated temporary directory."""
+        cls.temp_dir = tempfile.mkdtemp(prefix="dashclarity_app_test_")
+        config.set_test_mode_dir(Path(cls.temp_dir))
+
+        app.config["TESTING"] = True
         cls.client = app.test_client()
-        cls.test_dir = os.path.abspath("input_videos")
-        os.makedirs(cls.test_dir, exist_ok=True)
+        cls.test_dir = str(config.UPLOAD_DIR)
         
         # 1. Daytime video (high illumination ~180-220)
         cls.day_path = os.path.join(cls.test_dir, "test_daytime.mp4")
@@ -58,6 +69,12 @@ class DashClarityTestSuite(unittest.TestCase):
         cls.invalid_ext_path = os.path.join(cls.test_dir, "test_binary.exe")
         with open(cls.invalid_ext_path, "wb") as f:
             f.write(b"\x00\x01\x02\x03\x04")
+
+    @classmethod
+    def tearDownClass(cls):
+        """Removes temporary test directory completely."""
+        if os.path.exists(cls.temp_dir):
+            shutil.rmtree(cls.temp_dir, ignore_errors=True)
 
     @classmethod
     def _create_sample_video(cls, path, is_night=True, fps=30, size=(640, 360), frames=20):
@@ -113,14 +130,15 @@ class DashClarityTestSuite(unittest.TestCase):
             self.assertIn("error", data)
             self.assertIn("Unsupported format", data["error"])
             
-        # Corrupt file content
+        # Corrupt file content rejected with friendly message and 400
         with open(self.corrupt_path, "rb") as f:
             resp2 = self.client.post("/api/upload", data={"video": (f, "corrupt.mp4")})
-            self.assertEqual(resp2.status_code, 500)
+            self.assertEqual(resp2.status_code, 400)
+            self.assertIn("Corrupt or invalid video container", resp2.get_json()["error"])
         print("\n[TEST 03] Invalid and corrupt uploads correctly rejected.")
 
     def test_04_nighttime_enhancement_pipeline(self):
-        """Test actual STCD enhancement on nighttime low-light dashcam video."""
+        """Test actual enhancement on nighttime low-light dashcam video."""
         print("\n[TEST 04] Running default enhancement pipeline on nighttime video...")
         with open(self.night_path, "rb") as f:
             resp = self.client.post("/api/upload", data={"video": (f, "night_upload.mp4")})
@@ -205,7 +223,9 @@ class DashClarityTestSuite(unittest.TestCase):
         resp_stream = self.client.get("/media/enhanced/test_day_job")
         self.assertEqual(resp_stream.status_code, 200)
         self.assertEqual(resp_stream.mimetype, "video/mp4")
+        self.assertEqual(resp_stream.headers.get("Accept-Ranges"), "bytes")
         print("\n[TEST 07] Media download & video streaming endpoints verified.")
+
 
 if __name__ == "__main__":
     unittest.main()

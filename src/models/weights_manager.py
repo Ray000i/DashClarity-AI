@@ -167,3 +167,37 @@ def list_downloaded_weights() -> Dict[str, Dict[str, Any]]:
                 "size_mb": 0.0
             }
     return status
+
+
+def validate_weights_at_startup() -> Dict[str, bool]:
+    """
+    Validates whether required weights exist on disk.
+    If any are missing, logs a clear instructional error with the exact fix command.
+    """
+    missing = []
+    status = {}
+    required_models = ["zero_dce_plus", "scunet_color_real_psnr", "realesr_general_x4v3"]
+    for m in required_models:
+        info = WEIGHTS_REGISTRY.get(m, {})
+        p = WEIGHTS_DIR / info.get("category", "") / info.get("filename", "")
+        if p.exists() and p.stat().st_size > 1000:
+            status[m] = True
+        else:
+            status[m] = False
+            missing.append(f"{m} ({info.get('filename')})")
+
+    stcd_p = WEIGHTS_DIR / "STCD" / "indoor_G.pth"
+    status["stcd_indoor"] = stcd_p.exists() and stcd_p.stat().st_size > 1000
+
+    if missing:
+        logger.error("=" * 70)
+        logger.error("[MISSING WEIGHTS DETECTED] The following pretrained checkpoints are missing:")
+        for item in missing:
+            logger.error("  - %s", item)
+        logger.error("Please execute the following command to download weights:")
+        logger.error("  python scripts/download_weights.py")
+        logger.error("=" * 70)
+    else:
+        logger.info("All required deep learning weights validated successfully on disk.")
+
+    return status

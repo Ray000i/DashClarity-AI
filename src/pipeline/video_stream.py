@@ -54,9 +54,10 @@ class StreamingVideoProcessor:
         self.total_video_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
         if self.max_seconds and self.max_seconds > 0:
             max_limit = int(self.max_seconds * self.fps)
-            self.total_target_frames = min(self.total_video_frames, max_limit) // self.frame_skip
+            target = min(self.total_video_frames, max_limit) // self.frame_skip
         else:
-            self.total_target_frames = self.total_video_frames // self.frame_skip
+            target = self.total_video_frames // self.frame_skip
+        self.total_target_frames = max(1, target)
 
         self.ffmpeg_bin = get_ffmpeg_binary()
         self.audio_temp_path = self.output_path.with_suffix(".temp_audio.aac")

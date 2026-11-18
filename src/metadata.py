@@ -55,6 +55,14 @@ def extract_video_metadata(video_path: str) -> Dict[str, Any]:
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = float(cap.get(cv2.CAP_PROP_FPS))
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+    # Fallback to reading first frame if properties return 0
+    if width <= 0 or height <= 0:
+        ret, frame = cap.read()
+        if ret and frame is not None:
+            height, width = frame.shape[:2]
+            if total_frames <= 0:
+                total_frames = 1
     cap.release()
     
     # Handle potentially missing or variable FPS values

@@ -12,6 +12,11 @@ import torch.nn.functional as F
 logger = logging.getLogger("DashClarity.Pipeline.Tiling")
 
 
+class GPUOutOfMemoryFallback(Exception):
+    """Raised when GPU VRAM is completely exhausted even at minimum spatial tile size."""
+    pass
+
+
 def run_tiled_inference(
     model: torch.nn.Module,
     tensor: torch.Tensor,
@@ -69,15 +74,10 @@ def run_tiled_inference(
             )
             current_tile_size = new_tile
 
-    # If GPU fails even at minimum tile size, run with CPU fallback
-    logger.warning("Exhausted GPU tile reductions. Running CPU fallback for frame...")
+    # If GPU fails even at minimum tile size, raise GPUOutOfMemoryFallback
+    logger.warning("Exhausted GPU tile reductions. Raising GPUOutOfMemoryFallback for pipeline preset adaptation.")
     torch.cuda.empty_cache()
-    cpu_model = model.to('cpu').float()
-    cpu_tensor = tensor.to('cpu').float()
-    with torch.no_grad():
-        out = cpu_model(cpu_tensor)
-    model.to(device)
-    return out.to(device)
+    raise GPUOutOfMemoryFallback("GPU VRAM exhausted across all spatial tile sizes.")
 
 
 def _tiled_forward(

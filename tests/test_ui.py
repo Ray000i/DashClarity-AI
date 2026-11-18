@@ -2,46 +2,55 @@
 DashClarity AI - Frontend UI & API Route Test Suite
 Tests all routes, endpoints, JSON schemas, upload validations,
 missing-metric handling, and warning banners via Flask test client.
+
+Runs isolated from production directories using TEST_MODE.
 """
 
-import unittest
-import json
 import os
+import sys
+import json
 import io
+import shutil
+import tempfile
+import unittest
 from pathlib import Path
 import numpy as np
 import cv2
 
+# Set path and TEST_MODE prior to any app imports
+sys.path.insert(0, os.path.abspath("."))
+os.environ["TEST_MODE"] = "1"
+
+import config
 from app import app, processing_manager
-from config import BASE_DIR, OUTPUT_DIR, UPLOAD_DIR
 
 
 class TestFrontendUI(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        cls.temp_dir = tempfile.mkdtemp(prefix="dashclarity_ui_test_")
+        config.set_test_mode_dir(Path(cls.temp_dir))
+
         app.config["TESTING"] = True
         cls.client = app.test_client()
 
         # Create dummy job for results & processing testing
         cls.test_job_id = "test_ui_dummy_job"
-        dummy_in = UPLOAD_DIR / f"{cls.test_job_id}_sample.mp4"
-        dummy_out = OUTPUT_DIR / f"enhanced_{cls.test_job_id}.mp4"
-        dummy_json = OUTPUT_DIR / f"enhanced_{cls.test_job_id}.json"
+        dummy_in = config.UPLOAD_DIR / f"{cls.test_job_id}_sample.mp4"
+        dummy_out = config.OUTPUT_DIR / f"enhanced_{cls.test_job_id}.mp4"
+        dummy_json = config.OUTPUT_DIR / f"enhanced_{cls.test_job_id}.json"
 
-        # Write dummy files if not present
-        if not dummy_in.exists():
-            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-            out = cv2.VideoWriter(str(dummy_in), fourcc, 15.0, (320, 240))
-            for _ in range(15):
-                out.write(np.zeros((240, 320, 3), dtype=np.uint8))
-            out.release()
+        # Write dummy files
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        out_in = cv2.VideoWriter(str(dummy_in), fourcc, 15.0, (320, 240))
+        for _ in range(15):
+            out_in.write(np.zeros((240, 320, 3), dtype=np.uint8))
+        out_in.release()
 
-        if not dummy_out.exists():
-            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-            out = cv2.VideoWriter(str(dummy_out), fourcc, 15.0, (320, 240))
-            for _ in range(15):
-                out.write(np.ones((240, 320, 3), dtype=np.uint8) * 80)
-            out.release()
+        out_out = cv2.VideoWriter(str(dummy_out), fourcc, 15.0, (320, 240))
+        for _ in range(15):
+            out_out.write(np.ones((240, 320, 3), dtype=np.uint8) * 80)
+        out_out.release()
 
         # Write dummy metrics.json with schema_metrics and missing-metric case
         dummy_metrics = {
@@ -97,13 +106,18 @@ class TestFrontendUI(unittest.TestCase):
         with open(dummy_json, "w", encoding="utf-8") as f:
             json.dump(dummy_metrics, f, indent=2)
 
+    @classmethod
+    def tearDownClass(cls):
+        """Cleans up temporary directory completely."""
+        if os.path.exists(cls.temp_dir):
+            shutil.rmtree(cls.temp_dir, ignore_errors=True)
+
     def test_01_all_page_routes_return_200(self):
         """Verifies that all 5 user-facing pages return HTTP 200 OK."""
         routes = ["/", "/upload", f"/processing/{self.test_job_id}", f"/results/{self.test_job_id}", "/history", "/about"]
         for r in routes:
             resp = self.client.get(r)
             self.assertEqual(resp.status_code, 200, f"Route {r} returned {resp.status_code}")
-            # Ensure no ALL-CAPS marketing or obsolete strings
             html = resp.data.decode("utf-8")
             self.assertNotIn("FORENSIC ANALYSIS REPORT", html)
             self.assertNotIn("ORDER A", html)
@@ -173,6 +187,29 @@ class TestFrontendUI(unittest.TestCase):
         self.assertIn(resp.status_code, [200, 500])
         if resp.status_code == 200:
             self.assertEqual(resp.mimetype, "video/mp4")
+            resp.close()
+
+    def test_08_health_endpoint(self):
+        """Verifies /health endpoint."""
+        resp = self.client.get("/health")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertIn("status", data)
+        self.assertIn("cuda_available", data)
+        self.assertIn("weights_ok", data)
+
+    def test_09_custom_error_handlers(self):
+        """Verifies custom 404 handler for invalid routes."""
+        resp = self.client.get("/non_existent_page_12345")
+        self.assertEqual(resp.status_code, 404)
+        html = resp.data.decode("utf-8")
+        self.assertIn("404", html)
+        self.assertIn("Resource Not Found", html)
+
+        # API 404 returns JSON
+        resp_api = self.client.get("/api/non_existent_endpoint")
+        self.assertEqual(resp_api.status_code, 404)
+        self.assertIn("error", resp_api.get_json())
 
 
 if __name__ == "__main__":

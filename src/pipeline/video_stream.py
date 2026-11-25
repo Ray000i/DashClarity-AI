@@ -64,9 +64,9 @@ class StreamingVideoProcessor:
         self.audio_extracted = False
         self.audio_warning = None
 
-    def extract_audio(self) -> bool:
+    def extract_audio(self, target_duration_sec: Optional[float] = None) -> bool:
         """
-        Extracts original audio track for final multiplexing.
+        Extracts original audio track (clipped to target_duration_sec if set) for final multiplexing.
         Catches specific Subprocess/OS errors and logs clearly without silent bare excepts.
         """
         cmd = [
@@ -74,10 +74,14 @@ class StreamingVideoProcessor:
             "-y",
             "-i", str(self.input_path),
             "-vn",
+        ]
+        if target_duration_sec is not None and target_duration_sec > 0:
+            cmd.extend(["-t", f"{target_duration_sec:.3f}"])
+        cmd.extend([
             "-acodec", "aac",
             "-b:a", "192k",
             str(self.audio_temp_path)
-        ]
+        ])
         try:
             res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=45)
             if res.returncode == 0 and self.audio_temp_path.exists() and self.audio_temp_path.stat().st_size > 100:
@@ -105,28 +109,33 @@ class StreamingVideoProcessor:
         """
         Streams frames through the enhancement function directly into FFmpeg stdin.
         """
-        # 1. Extract audio in background
-        self.extract_audio()
-
-        # Read first frame to determine enhanced output dimensions
+        # Read first frame early to verify actual decoded dimensions (handles EXIF rotation & odd dimensions)
         self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
         ret, first_frame = self.cap.read()
         if not ret or first_frame is None:
             raise ValueError("Unable to read first video frame.")
 
+        self.in_height, self.in_width = first_frame.shape[:2]
+
+        # Extract audio trimmed to max_seconds (or full video duration) for exact A/V duration alignment
+        target_dur = (self.total_target_frames * self.frame_skip) / max(1.0, self.fps)
+        self.extract_audio(target_duration_sec=target_dur if self.max_seconds else None)
+
         test_enh, _ = frame_transform_fn(first_frame, None)
         raw_out_h, raw_out_w = test_enh.shape[:2]
         # Ensure dimensions are even numbers for libx264 yuv420p
-        out_w = (raw_out_w // 2) * 2
-        out_h = (raw_out_h // 2) * 2
+        out_w = max(2, (raw_out_w // 2) * 2)
+        out_h = max(2, (raw_out_h // 2) * 2)
         if raw_out_w != out_w or raw_out_h != out_h:
             test_enh = cv2.resize(test_enh, (out_w, out_h), interpolation=cv2.INTER_LINEAR)
+        test_enh = np.ascontiguousarray(test_enh)
 
         temp_video_out = self.output_path.with_suffix(".temp_enh.mp4")
         ffmpeg_log_path = self.output_path.with_suffix(".ffmpeg.log")
         ffmpeg_log_file = open(ffmpeg_log_path, "w", encoding="utf-8")
 
         # 2. Launch FFmpeg sub-process reading raw BGR24 frames from stdin pipe
+        # Converts RGB->YUV via BT.709 matrix and writes BT.709 tags so HD players match exact colors.
         ffmpeg_cmd = [
             self.ffmpeg_bin,
             "-y",
@@ -136,9 +145,6 @@ class StreamingVideoProcessor:
             "-pix_fmt", "bgr24",
             "-r", str(self.fps / self.frame_skip),
             "-i", "-",  # Read from pipe
-            # Convert RGB->YUV with the BT.709 matrix and tag the stream accordingly. Without this
-            # FFmpeg uses BT.601 and leaves the file untagged, so players (which assume BT.709 for
-            # HD) shift the colours of the enhanced video.
             "-vf", "scale=out_color_matrix=bt709:out_range=tv",
             "-c:v", "libx264",
             "-preset", "medium",
@@ -236,9 +242,11 @@ class StreamingVideoProcessor:
                 except OSError:
                     pass
         except BaseException as e:
-            # BaseException: a user cancel arrives as KeyboardInterrupt from the progress callback.
-            # The encoder must be stopped and the partial files removed in every case; previously a
-            # cancel skipped this block, leaving FFmpeg running and .temp_* files on disk.
+            if proc.stdin is not None:
+                try:
+                    proc.stdin.close()
+                except Exception:
+                    pass
             if proc.poll() is None:
                 proc.kill()
                 try:
@@ -264,30 +272,39 @@ class StreamingVideoProcessor:
         finally:
             self.cap.release()
 
-        # 4. Final mux. The audio is cut to the length of the enhanced video: when only part of
-        # the clip is processed (max_seconds) the full-length track would otherwise extend the
-        # file and freeze the last frame. The original track is stream-copied when the
-        # container allows it (no second lossy encode); otherwise the extracted AAC is used.
-        video_duration = frames_written / (self.fps / self.frame_skip)
+        # 4. Final Mux with Audio (stream-copy original audio first when supported; trim cleanly with -t & -shortest)
+        video_duration = frames_written / max(1.0, (self.fps / self.frame_skip))
         mux_res = None
         if self.audio_extracted:
-            attempts = [
+            mux_attempts = [
                 ["-i", str(self.input_path), "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "copy"],
-                ["-i", str(self.audio_temp_path), "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k"],
             ]
-            for extra in attempts:
-                cmd = [self.ffmpeg_bin, "-y", "-i", str(temp_video_out), *extra,
-                       "-t", f"{video_duration:.3f}", "-shortest", "-movflags", "+faststart", str(self.output_path)]
-                mux_res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if self.audio_temp_path.exists():
+                mux_attempts.append(
+                    ["-i", str(self.audio_temp_path), "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k"]
+                )
+            for extra in mux_attempts:
+                final_cmd = [
+                    self.ffmpeg_bin, "-y", "-i", str(temp_video_out),
+                    *extra,
+                    "-t", f"{video_duration:.3f}",
+                    "-shortest",
+                    "-movflags", "+faststart",
+                    str(self.output_path)
+                ]
+                mux_res = subprocess.run(final_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 if mux_res.returncode == 0:
                     break
+
         if mux_res is None or mux_res.returncode != 0:
             if mux_res is not None:
-                self.audio_warning = "Audio could not be multiplexed; the enhanced video was saved without audio."
-                logger.warning("%s FFmpeg: %s", self.audio_warning, mux_res.stderr.decode("utf-8", "ignore")[-300:])
-            mux_res = subprocess.run([self.ffmpeg_bin, "-y", "-i", str(temp_video_out), "-c:v", "copy",
-                                      "-movflags", "+faststart", str(self.output_path)],
-                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                self.audio_warning = "Audio could not be multiplexed; enhanced video was saved without audio."
+                logger.warning("%s", self.audio_warning)
+            no_audio_cmd = [
+                self.ffmpeg_bin, "-y", "-i", str(temp_video_out),
+                "-c:v", "copy", "-movflags", "+faststart", str(self.output_path)
+            ]
+            mux_res = subprocess.run(no_audio_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             if mux_res.returncode != 0:
                 shutil.move(str(temp_video_out), str(self.output_path))
 

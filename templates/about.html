@@ -49,17 +49,17 @@
             <dl class="about-dl">
                 <dt>Hardware architecture</dt>
                 <dd>
-                    Inference runs locally using PyTorch with CUDA acceleration on dedicated mobile hardware (NVIDIA GeForce RTX 4060 Laptop GPU, 8 GB VRAM, 115W).
+                    Inference runs locally using PyTorch with CUDA acceleration and adaptive VRAM profiling for 6 GB (RTX 4050) and 8 GB (RTX 4060) mobile GPUs (measured on NVIDIA GeForce RTX 4060 Laptop GPU, 8 GB VRAM).
                 </dd>
 
                 <dt>Memory envelope</dt>
                 <dd>
-                    Models execute in half-precision (FP16) tensor format with spatial tiling to keep measured peak VRAM under 735 MB for 720p and under 1.5 GB for 1080p processing.
+                    Models execute in half-precision (FP16, channels-last) with memory-aware untiled inference and adaptive tiling to keep measured peak allocated VRAM under 1.49 GB at 720p and under 3.1 GB at 1080p (within 6 GB RTX 4050 and 8 GB RTX 4060 envelopes).
                 </dd>
 
                 <dt>Measured throughput (RTX 4060)</dt>
                 <dd>
-                    Benchmarked in FP16 at 720p: Fast preset at 20.2 FPS (729 MB VRAM), Balanced preset at 3.5 FPS (729 MB VRAM), and Quality full pipeline at 0.6 FPS (734 MB VRAM).
+                    Benchmarked in FP16 at 720p: Fast preset at 26.83 FPS (587.8 MB VRAM), Balanced preset at 3.78 FPS (675.3 MB VRAM), and Quality full pipeline at 1.24 FPS (1484.3 MB VRAM).
                 </dd>
             </dl>
         </div>

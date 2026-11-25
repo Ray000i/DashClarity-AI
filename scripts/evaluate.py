@@ -75,11 +75,11 @@ def run_synthetic_ablation(
     configs = [
         {"name": "Degraded Input", "preset": "passthrough"},
         {"name": "Bicubic Interpolation", "preset": "bicubic"},
-        {"name": "Zero-DCE++ Only", "preset": "low_light"},
+        {"name": "Zero-DCE++ Only", "preset": "quality", "stage_overrides": {"enable_low_light": True, "enable_denoise": False, "enable_super_res": False, "enable_temporal": False}},
         {"name": "STCD Only", "preset": "stcd_comparison"},
         {"name": "Classical Bilateral Only", "preset": "classical_baseline"},
-        {"name": "SCUNet Denoiser Only", "preset": "rain_noise"},
-        {"name": "Real-ESRGAN SR Only", "preset": "upscale_only"},
+        {"name": "SCUNet Denoiser Only", "preset": "quality", "stage_overrides": {"enable_low_light": False, "enable_denoise": True, "enable_super_res": False, "enable_temporal": False}},
+        {"name": "Real-ESRGAN SR Only", "preset": "quality", "stage_overrides": {"enable_low_light": False, "enable_denoise": False, "enable_super_res": True, "enable_temporal": False}},
         {"name": "Full Proposed Pipeline", "preset": "full"}
     ]
 
@@ -106,7 +106,9 @@ def run_synthetic_ablation(
                 down = cv2.resize(deg, (w // 2, h // 2), interpolation=cv2.INTER_CUBIC)
                 out = cv2.resize(down, (w, h), interpolation=cv2.INTER_CUBIC)
             else:
-                out, _ = pipeline.enhance_frame(deg, deg, preset=preset)
+                out, _ = pipeline.enhance_frame(
+                    deg, deg, preset=preset, stage_overrides=cfg.get("stage_overrides")
+                )
 
             if out.shape[:2] != clean.shape[:2]:
                 out_aligned = cv2.resize(out, (clean.shape[1], clean.shape[0]), interpolation=cv2.INTER_LINEAR)
@@ -227,8 +229,14 @@ def generate_qualitative_grid(clean_dir: Path, degraded_dir: Path):
     clean = cv2.imread(str(c_file))
     deg = cv2.imread(str(d_file))
 
-    out_dce, _ = pipeline.enhance_frame(deg, deg, preset="low_light")
-    out_scu, _ = pipeline.enhance_frame(deg, deg, preset="rain_noise")
+    out_dce, _ = pipeline.enhance_frame(
+        deg, deg, preset="quality",
+        stage_overrides={"enable_low_light": True, "enable_denoise": False, "enable_super_res": False, "enable_temporal": False},
+    )
+    out_scu, _ = pipeline.enhance_frame(
+        deg, deg, preset="quality",
+        stage_overrides={"enable_low_light": False, "enable_denoise": True, "enable_super_res": False, "enable_temporal": False},
+    )
     out_full, _ = pipeline.enhance_frame(deg, deg, preset="full")
 
     # Resize all to 640x360 for consistent display

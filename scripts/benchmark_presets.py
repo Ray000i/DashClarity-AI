@@ -6,6 +6,7 @@ Updates results/results.json with measured performance metrics.
 
 import sys
 import os
+import gc
 import json
 import time
 from pathlib import Path
@@ -85,6 +86,12 @@ def benchmark_resolution(resolution_name: str, width: int, height: int):
         except Exception as e:
             print(f"[{preset_name.upper():<20}] FAILED: {e}", flush=True)
             results[preset_name] = {"fps": 0.0, "latency_ms": 0.0, "vram_mb": 0.0, "vram_gb": 0.0}
+        finally:
+            if "pipeline" in locals():
+                del pipeline
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
     return results
 
@@ -93,8 +100,9 @@ def main():
     res_720p = benchmark_resolution("720p Standard Dashcam", 1280, 720)
     res_1080p = benchmark_resolution("1080p Full HD Dashcam", 1920, 1080)
 
+    gpu_title = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU Mode"
     print("\n" + "="*85, flush=True)
-    print("CONSOLIDATED BENCHMARK REPORT (NVIDIA GeForce RTX 4060 Laptop GPU)", flush=True)
+    print(f"CONSOLIDATED BENCHMARK REPORT ({gpu_title})", flush=True)
     print("="*85, flush=True)
     print(f"{'PRESET':<20} | {'720p FPS':<10} | {'720p VRAM':<12} | {'1080p FPS':<10} | {'1080p VRAM':<12}", flush=True)
     print("-" * 85, flush=True)

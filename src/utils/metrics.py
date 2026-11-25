@@ -113,7 +113,7 @@ def evaluate_video_metrics(
     metrics_json_path: Optional[str] = None,
     ground_truth_frames: Optional[List[np.ndarray]] = None,
     compute_pyiqa: bool = True,
-    frames_processed: Optional[int] = None
+    total_frames_processed: Optional[int] = None
 ) -> Dict[str, Any]:
     """
     Computes authentic metrics across sample frame pairs matching results.json schema.
@@ -195,9 +195,9 @@ def evaluate_video_metrics(
     # 6. System & Hardware
     cuda_avail = torch.cuda.is_available()
     peak_vram = round(torch.cuda.max_memory_allocated() / (1024**2), 1) if cuda_avail else 0.0
-    # Throughput must use every processed frame, not the handful of frames sampled for metrics
-    n_proc = frames_processed if frames_processed else num_samples
-    proc_fps = round(n_proc / processing_time, 2) if processing_time > 0 else 0.0
+    frames_count = total_frames_processed if (total_frames_processed is not None and total_frames_processed > 0) else num_samples
+    proc_fps = round(frames_count / processing_time, 2) if processing_time > 0 else 0.0
+    gpu_label = f"CUDA ({torch.cuda.get_device_name(0)})" if cuda_avail else "CPU (Fallback)"
 
     # 7. Helper to evaluate change direction
     def evaluate_change(direction: str, raw_val, enh_val):
@@ -352,13 +352,14 @@ def evaluate_video_metrics(
             "original_resolution": orig_res,
             "enhanced_resolution": enh_res,
             "original_fps": orig_fps,
+            "total_frames_processed": frames_count,
             "processing_fps": proc_fps,
             "total_processing_time_sec": round(processing_time, 2),
             "original_file_size_bytes": orig_file_size,
             "enhanced_file_size_bytes": enh_file_size,
             "scene_lighting_condition": cond_name,
             "scene_diagnosis": cond_desc,
-            "device_mode": f"CUDA ({torch.cuda.get_device_name(0)})" if cuda_avail else "CPU (Fallback)",
+            "device_mode": gpu_label,
             "peak_vram_mb": peak_vram
         },
         "illumination_analysis": {

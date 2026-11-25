@@ -104,7 +104,7 @@ def main():
     # Extract metadata
     try:
         meta = extract_video_metadata(str(input_path))
-        print(f" Source Specs:    {meta['width']}x{meta['height']} @ {meta['fps']:.1f} FPS, {meta['frame_count']} frames ({meta['duration_sec']:.1f}s)")
+        print(f" Source Specs:    {meta['width']}x{meta['height']} @ {meta['fps']:.1f} FPS, {meta['total_frames']} frames ({meta['duration_seconds']:.1f}s)")
     except Exception as e:
         logger.warning(f"Could not read complete metadata: {e}")
         

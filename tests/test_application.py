@@ -99,15 +99,18 @@ class DashClarityTestSuite(unittest.TestCase):
         out.release()
 
     def test_01_api_system_status(self):
-        """Test GPU availability and model architecture status endpoint."""
+        """Test GPU availability, adaptive profile, and hardware detection status endpoint."""
+        import torch
         resp = self.client.get("/api/system/status")
         self.assertEqual(resp.status_code, 200)
         data = resp.get_json()
-        self.assertTrue(data["cuda_available"])
-        # Any CUDA GPU is valid (developed on RTX 4060 8 GB, also run on RTX 4050 6 GB)
-        self.assertNotEqual(data["device_name"], "CPU")
-        self.assertIn("+cu", data["pytorch_version"])
-        print("\n[TEST 01] GPU Status:", data["device_name"], "| PyTorch:", data["pytorch_version"])
+        self.assertIn("cuda_available", data)
+        self.assertIn("adaptive_profile", data)
+        if torch.cuda.is_available():
+            self.assertTrue(data["cuda_available"])
+            self.assertEqual(data["device_name"], torch.cuda.get_device_name(0))
+            self.assertGreater(data["total_vram_mb"], 0)
+        print("\n[TEST 01] GPU Status:", data["device_name"], "| VRAM:", data.get("total_vram_mb"), "MB | Tier:", data["adaptive_profile"]["tier"])
 
     def test_02_video_metadata_extraction(self):
         """Test metadata extraction across diverse dimensions and frame rates."""
@@ -221,12 +224,96 @@ class DashClarityTestSuite(unittest.TestCase):
         self.assertEqual(resp_dl.status_code, 200)
         self.assertEqual(resp_dl.mimetype, "video/mp4")
         self.assertIn("attachment", resp_dl.headers.get("Content-Disposition", ""))
+        resp_dl.close()
 
         resp_stream = self.client.get("/media/enhanced/test_day_job")
         self.assertEqual(resp_stream.status_code, 200)
         self.assertEqual(resp_stream.mimetype, "video/mp4")
         self.assertEqual(resp_stream.headers.get("Accept-Ranges"), "bytes")
+        resp_stream.close()
         print("\n[TEST 07] Media download & video streaming endpoints verified.")
+
+    def test_08_adaptive_vram_profiles(self):
+        """Verify adaptive profiles select optimal configs for RTX 4050 (6GB), RTX 4060 (8GB), and CPU."""
+        from src.utils.hardware import select_gpu_profile
+        p4050 = select_gpu_profile(6.0, cuda_available=True)
+        self.assertEqual(p4050["tier"], "mid_vram_6gb")
+        self.assertEqual(p4050["tile_size"], 384)
+        self.assertTrue(p4050["sequential_offload"])
+        self.assertLessEqual(p4050["sr_max_out_dim"], 2560)
+
+        p4060 = select_gpu_profile(8.0, cuda_available=True)
+        self.assertEqual(p4060["tier"], "high_vram_8gb")
+        self.assertEqual(p4060["tile_size"], 512)
+        self.assertGreaterEqual(p4060["tile_batch_size"], 2)
+
+        p_cpu = select_gpu_profile(0.0, cuda_available=False)
+        self.assertEqual(p_cpu["tier"], "cpu_fallback")
+        self.assertFalse(p_cpu["fp16"])
+        print("\n[TEST 08] Adaptive RTX 4050 (6GB) / RTX 4060 (8GB) / CPU profiles verified.")
+
+    def test_09_odd_resolution_and_cpu_lowlight_safety(self):
+        """Verify odd frame dimensions produce even H.264 output and CPU LowLightStage handles float32 cleanly."""
+        import torch
+        from src.pipeline.stages import LowLightStage
+        from src.pipeline.video_stream import StreamingVideoProcessor
+
+        # CPU LowLightStage float32 safety check (no .half() crash on CPU)
+        ll_cpu = LowLightStage(torch.device("cpu"), model_type="zero_dce_plus", fp16=False)
+        dark_odd = np.ones((181, 323, 3), dtype=np.uint8) * 18
+        out_cpu, info = ll_cpu.process_frame(dark_odd)
+        self.assertEqual(out_cpu.shape, (181, 323, 3))
+        self.assertTrue(info["applied"])
+
+        # Odd resolution stream processing -> even output resolution for libx264
+        odd_in = os.path.join(self.test_dir, "test_odd_323x181.mp4")
+        odd_out = os.path.join(self.test_dir, "test_odd_out.mp4")
+        out_w_writer = cv2.VideoWriter(odd_in, cv2.VideoWriter_fourcc(*'mp4v'), 15.0, (323, 181))
+        for _ in range(5):
+            out_w_writer.write(dark_odd.copy())
+        out_w_writer.release()
+
+        sp = StreamingVideoProcessor(odd_in, odd_out)
+        res = sp.process(lambda f, p: ll_cpu.process_frame(f, p))
+        self.assertEqual(res["out_width"] % 2, 0)
+        self.assertEqual(res["out_height"] % 2, 0)
+        self.assertEqual(res["total_frames_processed"], 5)
+        self.assertTrue(os.path.exists(odd_out))
+        print("\n[TEST 09] Odd resolution H.264 encoding and CPU float32 LowLight safety verified.")
+
+    def test_10_stage_overrides_and_fps_metrics(self):
+        """Verify UI stage_overrides are honored by pipeline and metrics report total_frames FPS."""
+        pm = ProcessingManager.get_instance()
+        pipeline = pm.get_pipeline()
+        dark_frame = np.ones((240, 320, 3), dtype=np.uint8) * 20
+
+        # Disable neural denoise via stage_overrides on balanced preset
+        _, telemetry = pipeline.enhance_frame(
+            dark_frame, dark_frame, preset="balanced",
+            stage_overrides={"enable_denoise": False, "enable_low_light": True, "enable_super_res": False, "enable_temporal": False}
+        )
+        self.assertNotIn("neural_denoise", telemetry)
+        self.assertIn("low_light", telemetry)
+        self.assertNotIn("temporal", telemetry)
+
+        # Verify total_frames_processed governs FPS calculation in evaluate_video_metrics
+        from src.utils.metrics import evaluate_video_metrics
+        orig_samples = [dark_frame] * 5
+        enh_samples = [dark_frame + 40] * 5
+        m = evaluate_video_metrics(
+            sample_orig_frames=orig_samples,
+            sample_enh_frames=enh_samples,
+            processing_time=10.0,
+            orig_file_size=1000,
+            enh_file_size=2000,
+            orig_res="320x240",
+            enh_res="320x240",
+            orig_fps=30.0,
+            compute_pyiqa=False,
+            total_frames_processed=300
+        )
+        self.assertAlmostEqual(m["technical_summary"]["processing_fps"], 30.0, places=2)
+        print("\n[TEST 10] stage_overrides enforcement and true FPS telemetry verified.")
 
 
 if __name__ == "__main__":

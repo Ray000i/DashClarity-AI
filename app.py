@@ -6,31 +6,30 @@ Academic End-Semester Generative AI Platform.
 
 import os
 import sys
+import re
+import json
+import time
+import logging
 from pathlib import Path
 
 
 def _relaunch_in_project_venv() -> None:
-    """`python app.py` with a Python whose PyTorch has no CUDA (e.g. the system Python with a
-    CPU-only wheel) would run every model on the CPU. If the project's .venv exists and has a
-    CUDA build of PyTorch, start the app with that interpreter instead.
-    Set DASHCLARITY_NO_VENV_RELAUNCH=1 to disable."""
+    """Relaunches via project .venv CUDA interpreter if invoked from CPU-only system Python."""
     if os.environ.get("DASHCLARITY_NO_VENV_RELAUNCH"):
         return
     venv_py = Path(__file__).resolve().parent / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
     if not venv_py.exists() or Path(sys.prefix).resolve() == venv_py.parent.parent.resolve():
-        return  # no project venv, or already running inside it
+        return
     try:
         import torch as _torch
         if _torch.cuda.is_available():
-            return  # this interpreter can already use the GPU
+            return
     except Exception:
         pass
     import subprocess
-    probe = subprocess.run([str(venv_py), "-c", "import torch; print(torch.cuda.is_available())"],
-                           capture_output=True, text=True)
+    probe = subprocess.run([str(venv_py), "-c", "import torch; print(torch.cuda.is_available())"], capture_output=True, text=True)
     if probe.stdout.strip() != "True":
-        return  # the venv cannot use the GPU either; keep the current interpreter
-    print(f"[DashClarity] This Python has no CUDA-enabled PyTorch; restarting with the GPU environment: {venv_py}", flush=True)
+        return
     env = dict(os.environ, DASHCLARITY_NO_VENV_RELAUNCH="1")
     try:
         code = subprocess.call([str(venv_py), str(Path(__file__).resolve()), *sys.argv[1:]], env=env)
@@ -42,10 +41,6 @@ def _relaunch_in_project_venv() -> None:
 if __name__ == "__main__":
     _relaunch_in_project_venv()
 
-import re
-import json
-import time
-import logging
 from flask import (
     Flask, render_template, request, jsonify,
     send_file, redirect, url_for, abort, Response
@@ -55,6 +50,7 @@ import torch
 
 import config
 from src.utils import generate_job_id, sanitize_filename, is_allowed_file, ensure_web_compatible_video
+from src.utils.hardware import detect_system_hardware, get_vram_snapshot
 from src.metadata import extract_video_metadata
 from src.video_processor import ProcessingManager, JobState
 from src.models.weights_manager import validate_weights_at_startup
@@ -144,28 +140,27 @@ def health_status():
 
 @app.route("/api/system/status", methods=["GET"])
 def api_system_status():
-    """Returns detailed GPU and deep learning runtime metrics."""
-    cuda_avail = torch.cuda.is_available()
+    """Returns detailed GPU, VRAM, system RAM, adaptive tier, and deep learning runtime metrics."""
+    hw = detect_system_hardware()
+    vram = get_vram_snapshot()
     info = {
-        "cuda_available": cuda_avail,
-        "pytorch_version": torch.__version__,
-        "device_name": torch.cuda.get_device_name(0) if cuda_avail else "CPU",
-        "device_count": torch.cuda.device_count() if cuda_avail else 0,
-        "allocated_vram_mb": round(torch.cuda.memory_allocated() / (1024**2), 2) if cuda_avail else 0.0,
-        "max_vram_mb": round(torch.cuda.max_memory_allocated() / (1024**2), 2) if cuda_avail else 0.0,
+        "cuda_available": hw["cuda_available"],
+        "pytorch_version": hw["pytorch_version"],
+        "cuda_version": hw["cuda_version"],
+        "driver_version": hw.get("driver_version"),
+        "device_name": hw["gpu_name"] if hw["cuda_available"] else "CPU",
+        "device_count": hw["device_count"],
+        "total_vram_mb": hw["total_vram_mb"],
+        "free_vram_mb": vram["free_mb"] if hw["cuda_available"] else 0.0,
+        "allocated_vram_mb": vram["allocated_mb"],
+        "max_vram_mb": vram["max_allocated_mb"],
+        "system_ram_total_gb": hw["system_ram_total_gb"],
+        "system_ram_available_gb": hw["system_ram_available_gb"],
+        "adaptive_profile": hw["profile"],
+        "vram": vram,
         "model_architecture": "Modular: SCUNet + Zero-DCE++ + Real-ESRGAN + Farneback",
         "weights_status": "Loaded"
     }
-    # Live GPU memory and the adaptive profile chosen for this GPU (all values measured, none fixed)
-    from src.hardware import detect_hardware, vram_snapshot
-    hw = detect_hardware()
-    info["cuda_build"] = hw.get("torch_cuda_build")
-    info["driver_version"] = hw.get("driver")
-    info["vram"] = vram_snapshot()
-    pipe = processing_manager.pipeline
-    info["gpu_profile"] = getattr(pipe, "profile", None)
-    if hw.get("warning"):
-        info["warning"] = hw["warning"]
     return jsonify(info)
 
 
@@ -357,9 +352,7 @@ def api_upload():
                 saved_path.unlink()
             except OSError:
                 pass
-        # The exception text contains the server-side file path; keep it in the log only
-        return jsonify({"error": "Corrupt or invalid video container: the file could not be decoded as a video. "
-                                 "Please upload a valid playable video."}), 400
+        return jsonify({"error": "Corrupt or invalid video container: the file could not be decoded as a playable video."}), 400
     except Exception as e:
         logger.exception(f"Upload failed: {e}")
         if saved_path.exists():
@@ -367,7 +360,7 @@ def api_upload():
                 saved_path.unlink()
             except OSError:
                 pass
-        return jsonify({"error": "Failed to process the uploaded video. See the server log for details."}), 500
+        return jsonify({"error": "Failed to process uploaded video. Please check server logs for details."}), 500
 
 
 @app.route("/api/video/<job_id>", methods=["GET"])
@@ -409,7 +402,10 @@ def api_start_enhance(job_id):
 
     data = request.get_json(silent=True) or {}
     preset = str(data.get("preset", "balanced")).lower()
-    strength = float(data.get("strength", 1.0))
+    try:
+        strength = max(0.05, min(1.0, float(data.get("strength", 1.0))))
+    except (ValueError, TypeError):
+        strength = 1.0
 
     max_seconds = data.get("max_seconds", None)
     if max_seconds is not None:
@@ -417,10 +413,13 @@ def api_start_enhance(job_id):
             max_seconds = float(max_seconds)
             if max_seconds <= 0:
                 max_seconds = None
-        except ValueError:
+        except (ValueError, TypeError):
             max_seconds = None
 
-    frame_skip = int(data.get("frame_skip", 1))
+    try:
+        frame_skip = max(1, int(data.get("frame_skip", 1)))
+    except (ValueError, TypeError):
+        frame_skip = 1
     restore_at_original_res = data.get("restore_at_original_res", None)
 
     stage_overrides = None

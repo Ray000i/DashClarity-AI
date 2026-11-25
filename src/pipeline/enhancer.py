@@ -23,6 +23,7 @@ from src.pipeline.stages import (
     TemporalSmoothingStage
 )
 from src.pipeline.tiling import GPUOutOfMemoryFallback
+from src.hardware import detect_hardware, select_profile, configure_torch
 
 logger = logging.getLogger("DashClarity.Pipeline.Enhancer")
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -40,15 +41,24 @@ class VideoEnhancementPipeline:
         with open(config_path, "r", encoding="utf-8") as f:
             self.cfg = yaml.safe_load(f)
 
-        device_name = self.cfg.get("hardware", {}).get("device", "cuda")
+        hw_cfg = self.cfg.get("hardware", {})
+        device_name = hw_cfg.get("device", "cuda")
         self.device = torch.device(
             "cuda:0" if torch.cuda.is_available() and device_name == "cuda" else "cpu"
         )
-        self.fp16 = self.cfg.get("hardware", {}).get("fp16", True) and self.device.type == "cuda"
-        self.tile_size = self.cfg.get("hardware", {}).get("tile_size", 256)
-        self.tile_pad = self.cfg.get("hardware", {}).get("tile_pad", 16)
+        # Adaptive GPU profile from the detected device and its free VRAM (RTX 4050 6 GB,
+        # RTX 4060 8 GB, ...). config.yaml values act as upper limits.
+        self.hardware = detect_hardware()
+        if self.hardware.get("warning"):
+            logger.warning(self.hardware["warning"])
+        self.profile = select_profile(self.hardware if self.device.type == "cuda" else {"cuda_available": False})
+        configure_torch(self.profile)
+        self.fp16 = hw_cfg.get("fp16", True) and self.profile["fp16"] and self.device.type == "cuda"
+        self.tile_size = min(int(hw_cfg.get("tile_size", 512)), self.profile["tile_size"])
+        self.sr_tile_size = min(int(hw_cfg.get("tile_size", 512)), self.profile["sr_tile_size"])
+        self.tile_pad = hw_cfg.get("tile_pad", 16)
 
-        logger.info("Initializing VideoEnhancementPipeline on %s (fp16=%s)", self.device, self.fp16)
+        logger.info("Initializing VideoEnhancementPipeline on %s (fp16=%s, profile=%s)", self.device, self.fp16, self.profile)
 
         # Stage instances
         self.neural_denoise_stage = None
@@ -61,26 +71,59 @@ class VideoEnhancementPipeline:
         self.temporal_stage = TemporalSmoothingStage(
             ema_alpha=self.cfg.get("models", {}).get("temporal_ema_alpha", 0.20),
             motion_compensated=self.cfg.get("models", {}).get("motion_compensated", True),
-            flow_scale=self.cfg.get("models", {}).get("flow_scale", 0.5)
+            flow_scale=self.cfg.get("models", {}).get("flow_scale", 0.5),
+            device=self.device
         )
 
         self.current_preset = preset
         self._load_models_for_preset(preset)
 
+    def _unload_unused_models(self, preset_cfg: Dict[str, Any]) -> None:
+        """Release GPU models the active preset does not use. Enabled automatically on GPUs with a
+        small VRAM budget (profile["unload_unused_models"]); larger GPUs keep them for fast switching."""
+        if not self.profile.get("unload_unused_models"):
+            return
+        uses_stcd = preset_cfg.get("low_light_model") == "stcd_lowlight" and preset_cfg.get("enable_low_light", False)
+        uses_zdce = preset_cfg.get("enable_low_light", False) and not uses_stcd
+        wanted = {
+            "neural_denoise_stage": preset_cfg.get("enable_neural_denoise", False) or preset_cfg.get("enable_denoise", False),
+            "super_res_stage": preset_cfg.get("enable_super_res", False),
+            "stcd_stage": uses_stcd,
+            "low_light_stage": uses_zdce,
+        }
+        released = [name for name, keep in wanted.items() if not keep and getattr(self, name, None) is not None]
+        for name in released:
+            setattr(self, name, None)
+        if released and self.device.type == "cuda":
+            import gc
+            gc.collect()
+            torch.cuda.empty_cache()
+            logger.info("Unloaded unused models for this preset: %s", ", ".join(released))
+
+    def release_cached_memory(self) -> None:
+        """Return cached-but-free GPU memory to the driver (e.g. after a job), keeping models loaded."""
+        if self.device.type == "cuda":
+            torch.cuda.empty_cache()
+
     def _load_models_for_preset(self, preset_name: str):
         presets = self.cfg.get("presets", {})
         preset_cfg = presets.get(preset_name, presets.get("full", {}))
+        self._unload_unused_models(preset_cfg)
 
         # 1. Neural Denoiser setup (SCUNet via spandrel)
         if preset_cfg.get("enable_neural_denoise", False) or preset_cfg.get("enable_denoise", False):
             fast_m = preset_cfg.get("neural_denoise_fast_mode", False)
             if self.neural_denoise_stage is None or getattr(self.neural_denoise_stage, "fast_mode", None) != fast_m:
+                if self.neural_denoise_stage is not None and self.device.type == "cuda":
+                    self.neural_denoise_stage = None
+                    torch.cuda.empty_cache()
                 self.neural_denoise_stage = NeuralDenoiseStage(
                     device=self.device,
                     tile_size=self.tile_size,
                     tile_pad=self.tile_pad,
                     fp16=self.fp16,
-                    fast_mode=fast_m
+                    fast_mode=fast_m,
+                    full_frame_max_px=self.profile["scunet_full_frame_max_px"]
                 )
 
         # Update temporal flow scale if preset configures it
@@ -96,6 +139,9 @@ class VideoEnhancementPipeline:
             else:
                 if self.low_light_stage is None:
                     self.low_light_stage = LowLightStage(self.device, model_type="zero_dce_plus")
+                    for k, v in (self.cfg.get("models", {}).get("low_light_tuning") or {}).items():
+                        if hasattr(self.low_light_stage, k):
+                            setattr(self.low_light_stage, k, v)
 
         # 3. Super-Resolution model setup
         if preset_cfg.get("enable_super_res", False):
@@ -104,14 +150,18 @@ class VideoEnhancementPipeline:
                 self.super_res_stage = SuperResolutionStage(
                     device=self.device,
                     model_name=sr_key,
-                    tile_size=self.tile_size,
+                    tile_size=self.sr_tile_size,
                     tile_pad=self.tile_pad,
                     fp16=self.fp16
                 )
+                self.super_res_stage.full_frame_max_px = self.profile["sr_full_frame_max_px"]
 
     def reset_temporal(self):
-        """Clears temporal motion buffer between video clips."""
+        """Clears temporal state (motion buffer, exposure history) between video clips."""
         self.temporal_stage.reset()
+        for st in (self.low_light_stage, self.stcd_stage):
+            if st is not None and hasattr(st, "reset"):
+                st.reset()
 
     def enhance_frame(
         self,

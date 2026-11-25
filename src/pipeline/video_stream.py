@@ -136,10 +136,19 @@ class StreamingVideoProcessor:
             "-pix_fmt", "bgr24",
             "-r", str(self.fps / self.frame_skip),
             "-i", "-",  # Read from pipe
+            # Convert RGB->YUV with the BT.709 matrix and tag the stream accordingly. Without this
+            # FFmpeg uses BT.601 and leaves the file untagged, so players (which assume BT.709 for
+            # HD) shift the colours of the enhanced video.
+            "-vf", "scale=out_color_matrix=bt709:out_range=tv",
             "-c:v", "libx264",
             "-preset", "medium",
             "-crf", "18",
             "-pix_fmt", "yuv420p",
+            "-colorspace", "bt709",
+            "-color_primaries", "bt709",
+            "-color_trc", "bt709",
+            "-color_range", "tv",
+            "-x264-params", "colorprim=bt709:transfer=bt709:colormatrix=bt709",
             "-movflags", "+faststart",
             str(temp_video_out)
         ]
@@ -226,9 +235,16 @@ class StreamingVideoProcessor:
                     ffmpeg_log_path.unlink()
                 except OSError:
                     pass
-        except Exception as e:
+        except BaseException as e:
+            # BaseException: a user cancel arrives as KeyboardInterrupt from the progress callback.
+            # The encoder must be stopped and the partial files removed in every case; previously a
+            # cancel skipped this block, leaving FFmpeg running and .temp_* files on disk.
             if proc.poll() is None:
                 proc.kill()
+                try:
+                    proc.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    pass
             ffmpeg_log_file.close()
             err_details = ""
             if ffmpeg_log_path.exists():
@@ -237,32 +253,43 @@ class StreamingVideoProcessor:
                         err_details = f.read()[-500:]
                 except Exception:
                     pass
+            for partial in (temp_video_out, self.audio_temp_path, ffmpeg_log_path):
+                try:
+                    partial.unlink(missing_ok=True)
+                except OSError:
+                    logger.warning("Could not remove partial file %s", partial)
+            if isinstance(e, KeyboardInterrupt):
+                raise
             raise RuntimeError(f"Streaming enhancement pipeline failed: {e}. FFmpeg output: {err_details}")
         finally:
             self.cap.release()
 
-        # 4. Final Mux with Audio (if audio was extracted)
-        final_cmd = [self.ffmpeg_bin, "-y", "-i", str(temp_video_out)]
-        if self.audio_extracted and self.audio_temp_path.exists():
-            final_cmd.extend([
-                "-i", str(self.audio_temp_path),
-                "-c:v", "copy",
-                "-c:a", "aac",
-                "-b:a", "192k",
-                "-movflags", "+faststart",
-                str(self.output_path)
-            ])
-        else:
-            final_cmd.extend([
-                "-c:v", "copy",
-                "-movflags", "+faststart",
-                str(self.output_path)
-            ])
-
-        mux_res = subprocess.run(final_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        if mux_res.returncode != 0:
-            # Fallback copy
-            shutil.move(str(temp_video_out), str(self.output_path))
+        # 4. Final mux. The audio is cut to the length of the enhanced video: when only part of
+        # the clip is processed (max_seconds) the full-length track would otherwise extend the
+        # file and freeze the last frame. The original track is stream-copied when the
+        # container allows it (no second lossy encode); otherwise the extracted AAC is used.
+        video_duration = frames_written / (self.fps / self.frame_skip)
+        mux_res = None
+        if self.audio_extracted:
+            attempts = [
+                ["-i", str(self.input_path), "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "copy"],
+                ["-i", str(self.audio_temp_path), "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k"],
+            ]
+            for extra in attempts:
+                cmd = [self.ffmpeg_bin, "-y", "-i", str(temp_video_out), *extra,
+                       "-t", f"{video_duration:.3f}", "-shortest", "-movflags", "+faststart", str(self.output_path)]
+                mux_res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                if mux_res.returncode == 0:
+                    break
+        if mux_res is None or mux_res.returncode != 0:
+            if mux_res is not None:
+                self.audio_warning = "Audio could not be multiplexed; the enhanced video was saved without audio."
+                logger.warning("%s FFmpeg: %s", self.audio_warning, mux_res.stderr.decode("utf-8", "ignore")[-300:])
+            mux_res = subprocess.run([self.ffmpeg_bin, "-y", "-i", str(temp_video_out), "-c:v", "copy",
+                                      "-movflags", "+faststart", str(self.output_path)],
+                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if mux_res.returncode != 0:
+                shutil.move(str(temp_video_out), str(self.output_path))
 
         # Cleanup temp video and audio
         if temp_video_out.exists():

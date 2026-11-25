@@ -23,10 +23,15 @@ def run_tiled_inference(
     tile_size: int = 384,
     tile_pad: int = 16,
     scale: int = 1,
-    fp16: bool = True
+    fp16: bool = True,
+    tile_state: dict = None
 ) -> torch.Tensor:
     """
     Executes model inference in overlapping spatial tiles to cap peak VRAM.
+
+    tile_state (optional, owned by the calling stage) remembers the tile size that worked
+    after an out-of-memory reduction, so later frames start there instead of hitting the
+    same OOM on every frame.
     
     Args:
         model: PyTorch model in eval() mode.
@@ -41,15 +46,21 @@ def run_tiled_inference(
     """
     b, c, h, w = tensor.shape
     device = tensor.device
+    if tile_state is not None and tile_state.get("tile_size"):
+        tile_size = min(tile_size, tile_state["tile_size"])
 
     # For small images that comfortably fit in VRAM, run directly with OOM protection
     if max(h, w) <= tile_size:
         try:
             with torch.amp.autocast('cuda', enabled=fp16 and device.type == 'cuda'):
-                return model(tensor)
+                out = model(tensor)
+                return out[0] if isinstance(out, tuple) else out
         except torch.cuda.OutOfMemoryError:
             logger.warning("CUDA OOM on full frame (%dx%d). Falling back to tiled execution.", w, h)
             torch.cuda.empty_cache()
+            tile_size = min(tile_size, 512)
+            if tile_state is not None:
+                tile_state["tile_size"] = tile_size
 
     # Determine tile grid
     current_tile_size = tile_size
@@ -57,7 +68,7 @@ def run_tiled_inference(
 
     while current_tile_size >= min_tile_size:
         try:
-            return _tiled_forward(
+            out = _tiled_forward(
                 model=model,
                 tensor=tensor,
                 tile_size=current_tile_size,
@@ -65,6 +76,10 @@ def run_tiled_inference(
                 scale=scale,
                 fp16=fp16
             )
+            if tile_state is not None and current_tile_size != tile_size:
+                tile_state["tile_size"] = current_tile_size
+                logger.info("Tile size %d will be reused for the following frames.", current_tile_size)
+            return out
         except torch.cuda.OutOfMemoryError:
             torch.cuda.empty_cache()
             new_tile = int(current_tile_size * 0.75)

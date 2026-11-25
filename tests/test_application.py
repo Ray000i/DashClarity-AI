@@ -104,7 +104,9 @@ class DashClarityTestSuite(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         data = resp.get_json()
         self.assertTrue(data["cuda_available"])
-        self.assertIn("RTX 4060", data["device_name"])
+        # Any CUDA GPU is valid (developed on RTX 4060 8 GB, also run on RTX 4050 6 GB)
+        self.assertNotEqual(data["device_name"], "CPU")
+        self.assertIn("+cu", data["pytorch_version"])
         print("\n[TEST 01] GPU Status:", data["device_name"], "| PyTorch:", data["pytorch_version"])
 
     def test_02_video_metadata_extraction(self):

@@ -5,11 +5,47 @@ Academic End-Semester Generative AI Platform.
 """
 
 import os
+import sys
+from pathlib import Path
+
+
+def _relaunch_in_project_venv() -> None:
+    """`python app.py` with a Python whose PyTorch has no CUDA (e.g. the system Python with a
+    CPU-only wheel) would run every model on the CPU. If the project's .venv exists and has a
+    CUDA build of PyTorch, start the app with that interpreter instead.
+    Set DASHCLARITY_NO_VENV_RELAUNCH=1 to disable."""
+    if os.environ.get("DASHCLARITY_NO_VENV_RELAUNCH"):
+        return
+    venv_py = Path(__file__).resolve().parent / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    if not venv_py.exists() or Path(sys.prefix).resolve() == venv_py.parent.parent.resolve():
+        return  # no project venv, or already running inside it
+    try:
+        import torch as _torch
+        if _torch.cuda.is_available():
+            return  # this interpreter can already use the GPU
+    except Exception:
+        pass
+    import subprocess
+    probe = subprocess.run([str(venv_py), "-c", "import torch; print(torch.cuda.is_available())"],
+                           capture_output=True, text=True)
+    if probe.stdout.strip() != "True":
+        return  # the venv cannot use the GPU either; keep the current interpreter
+    print(f"[DashClarity] This Python has no CUDA-enabled PyTorch; restarting with the GPU environment: {venv_py}", flush=True)
+    env = dict(os.environ, DASHCLARITY_NO_VENV_RELAUNCH="1")
+    try:
+        code = subprocess.call([str(venv_py), str(Path(__file__).resolve()), *sys.argv[1:]], env=env)
+    except KeyboardInterrupt:
+        code = 0
+    sys.exit(code)
+
+
+if __name__ == "__main__":
+    _relaunch_in_project_venv()
+
 import re
 import json
 import time
 import logging
-from pathlib import Path
 from flask import (
     Flask, render_template, request, jsonify,
     send_file, redirect, url_for, abort, Response
@@ -120,6 +156,16 @@ def api_system_status():
         "model_architecture": "Modular: SCUNet + Zero-DCE++ + Real-ESRGAN + Farneback",
         "weights_status": "Loaded"
     }
+    # Live GPU memory and the adaptive profile chosen for this GPU (all values measured, none fixed)
+    from src.hardware import detect_hardware, vram_snapshot
+    hw = detect_hardware()
+    info["cuda_build"] = hw.get("torch_cuda_build")
+    info["driver_version"] = hw.get("driver")
+    info["vram"] = vram_snapshot()
+    pipe = processing_manager.pipeline
+    info["gpu_profile"] = getattr(pipe, "profile", None)
+    if hw.get("warning"):
+        info["warning"] = hw["warning"]
     return jsonify(info)
 
 
@@ -311,7 +357,9 @@ def api_upload():
                 saved_path.unlink()
             except OSError:
                 pass
-        return jsonify({"error": f"Corrupt or invalid video container: {str(ve)}. Please upload a valid playable video."}), 400
+        # The exception text contains the server-side file path; keep it in the log only
+        return jsonify({"error": "Corrupt or invalid video container: the file could not be decoded as a video. "
+                                 "Please upload a valid playable video."}), 400
     except Exception as e:
         logger.exception(f"Upload failed: {e}")
         if saved_path.exists():
@@ -319,7 +367,7 @@ def api_upload():
                 saved_path.unlink()
             except OSError:
                 pass
-        return jsonify({"error": f"Failed to process uploaded video: {str(e)}"}), 500
+        return jsonify({"error": "Failed to process the uploaded video. See the server log for details."}), 500
 
 
 @app.route("/api/video/<job_id>", methods=["GET"])

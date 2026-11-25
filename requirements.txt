@@ -19,6 +19,9 @@ scipy>=1.11.0
 tqdm>=4.66.0
 PyYAML>=6.0.1
 
+# Model loader used for the SCUNet denoiser (src/pipeline/stages.py)
+spandrel>=0.4.0
+
 # Web Application Framework
 flask>=3.0.0
 Werkzeug>=3.0.0

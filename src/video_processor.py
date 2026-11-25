@@ -17,6 +17,7 @@ from typing import Dict, Any, Optional, List, Tuple
 
 import cv2
 import numpy as np
+import torch
 
 import config
 from src.pipeline.enhancer import VideoEnhancementPipeline
@@ -318,6 +319,8 @@ class ProcessingManager:
                 )
             finally:
                 self.active_job_id = None
+                if self.pipeline is not None:
+                    self.pipeline.release_cached_memory()  # give unused VRAM back to the desktop / other apps
                 self.job_queue.task_done()
 
     def _run_pipeline(
@@ -345,6 +348,8 @@ class ProcessingManager:
         try:
             pipeline = self.get_pipeline()
             pipeline.reset_temporal()
+            if torch.cuda.is_available():
+                torch.cuda.reset_peak_memory_stats()  # peak VRAM must describe this job only
             job.add_log(f"Compute hardware initialized: {pipeline.device} (fp16={pipeline.fp16})")
 
             # Initialize Streaming Processor
@@ -365,10 +370,6 @@ class ProcessingManager:
                 f"Ingested stream: {streamer.in_width}x{streamer.in_height} @ {streamer.fps:.1f} FPS "
                 f"({streamer.total_target_frames} frames to process)"
             )
-            if streamer.audio_extracted:
-                job.add_log("Audio stream detected and extracted for final multiplexing.")
-            else:
-                job.add_log(f"Audio note: {streamer.audio_warning or 'No audio stream.'}")
 
             last_log_frame = 0
 
@@ -404,6 +405,11 @@ class ProcessingManager:
                 progress_callback=on_progress
             )
 
+            if streamer.audio_extracted:
+                job.add_log("Original audio track preserved and trimmed to the enhanced video length.")
+            else:
+                job.add_log(f"Audio note: {streamer.audio_warning or 'No audio stream.'}")
+
             sample_origs = result_info["sample_orig_frames"]
             sample_enhs = result_info["sample_enh_frames"]
 
@@ -431,7 +437,8 @@ class ProcessingManager:
                 orig_res=f"{streamer.in_width}x{streamer.in_height}",
                 enh_res=f"{result_info['out_width']}x{result_info['out_height']}",
                 orig_fps=streamer.fps,
-                metrics_json_path=str(metrics_json_path)
+                metrics_json_path=str(metrics_json_path),
+                frames_processed=result_info["total_frames_processed"]
             )
 
             # Generate thumbnail for history view
@@ -445,6 +452,10 @@ class ProcessingManager:
                 metrics=real_metrics,
                 audio_warning=result_info.get("audio_warning")
             )
+            if torch.cuda.is_available():
+                job.add_log(f"GPU memory: peak {torch.cuda.max_memory_allocated() / 2**20:.0f} MB allocated, "
+                            f"{torch.cuda.max_memory_reserved() / 2**20:.0f} MB reserved "
+                            f"(budget {pipeline.profile.get('vram_budget_mb')} MB, {pipeline.profile.get('tier')}).")
             job.add_log(f"Job completed successfully in {result_info['total_time_seconds']:.2f}s ({result_info['processing_fps']:.2f} FPS avg).")
             logger.info("Job %s completed successfully in %.2fs", job.job_id, result_info["total_time_seconds"])
 

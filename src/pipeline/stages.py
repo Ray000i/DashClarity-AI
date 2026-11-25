@@ -22,6 +22,23 @@ from src.models.rrdb import RRDBNet
 from src.models.stcd import STCDWrapper
 from src.models.weights_manager import get_weights_path
 from src.pipeline.tiling import run_tiled_inference
+from src.models.scunet_fast import accelerate_scunet
+
+_CL = torch.channels_last
+
+
+def _bgr_to_tensor(frame_bgr: np.ndarray, device: torch.device, half: bool) -> torch.Tensor:
+    """uint8 BGR HxWx3 -> float RGB 1x3xHxW in [0,1] on `device` (conversion done on the GPU)."""
+    t = torch.from_numpy(np.ascontiguousarray(frame_bgr)).to(device, non_blocking=True)
+    t = t.permute(2, 0, 1).flip(0).unsqueeze(0)
+    t = (t.half() if half else t.float()) * (1.0 / 255.0)
+    return t.contiguous(memory_format=_CL) if device.type == "cuda" else t.contiguous()
+
+
+def _tensor_to_bgr(t: torch.Tensor, h: int, w: int) -> np.ndarray:
+    """float RGB 1x3xHxW in [0,1] -> uint8 BGR HxWx3 (rounding, channel flip and crop on the GPU)."""
+    t = (t[:, :, :h, :w].float().clamp(0.0, 1.0) * 255.0).round().to(torch.uint8)
+    return t.squeeze(0).flip(0).permute(1, 2, 0).contiguous().cpu().numpy()
 
 logger = logging.getLogger("DashClarity.Pipeline.Stages")
 
@@ -50,6 +67,45 @@ class LowLightStage:
         else:
             raise ValueError(f"Unknown low-light model type: {model_type}")
 
+        # Tunables (defaults chosen from scripts/benchmark_gpu.py measurements, see docs/GPU_OPTIMIZATION.md)
+        # Measured in scripts/quality_experiments.py (balanced preset, identical inputs):
+        #  - smooth_exposure: real-clip flicker 2.48 -> 1.26, no other metric changes
+        #  - curve_downscale 0.25 (as in the published Zero-DCE++): 37 -> 8 ms per 720p frame,
+        #    quality neutral (SSIM +0.002, LPIPS +0.006, NIQE 8.49 -> 8.38, noise lower)
+        #  - color_balance 0.5: LPIPS 0.470 -> 0.451, PSNR +0.21 dB (full gray-world tints scenes
+        #    whose true average is not grey); half strength keeps the guard against sensor casts
+        #  - clahe_clip: rejected by default (temporal error +35-62%, noise x2), kept as an option
+        self.curve_downscale = 0.25
+        self.color_balance = 0.5
+        self.clahe_clip = 0.0
+        self.smooth_exposure = True
+        self._lum_ema: Optional[float] = None
+
+    def reset(self) -> None:
+        """Forget the exposure history (call between videos)."""
+        self._lum_ema = None
+
+    # Original step thresholds -> strength: <45: 1.0, 45-80: 0.60, 80-120: 0.22, >=120: 0.05.
+    # A continuous curve through the middle of each step removes the frame-to-frame jumps when
+    # the scene brightness hovers near a threshold (a measured source of flicker).
+    _LUM_KNOTS = (35.0, 62.5, 100.0, 130.0)
+    _STR_KNOTS = (1.00, 0.60, 0.22, 0.05)
+
+    def _exposure(self, mean_lum: float, strength: float) -> Tuple[float, str]:
+        lum = mean_lum
+        if self.smooth_exposure:
+            if self._lum_ema is None or abs(mean_lum - self._lum_ema) > 25.0:   # first frame / scene cut
+                self._lum_ema = mean_lum
+            else:
+                self._lum_ema = 0.9 * self._lum_ema + 0.1 * mean_lum
+            lum = self._lum_ema
+            base = float(np.interp(lum, self._LUM_KNOTS, self._STR_KNOTS))
+        else:
+            base = 0.05 if lum >= 120.0 else 0.22 if lum >= 80.0 else 0.60 if lum >= 45.0 else 1.0
+        condition = ("daytime_bright" if lum >= 120.0 else "daytime_moderate" if lum >= 80.0
+                     else "twilight_mixed" if lum >= 45.0 else "nighttime_lowlight")
+        return base * strength, condition
+
     def process_frame(
         self,
         frame_bgr: np.ndarray,
@@ -59,20 +115,8 @@ class LowLightStage:
         gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
         mean_lum = float(np.mean(gray))
 
-        # Adaptive exposure thresholding:
-        # Prevents overexposure in daylight while boosting nighttime scenes
-        if mean_lum >= 120.0:
-            adaptive_strength = 0.05 * strength
-            condition = "daytime_bright"
-        elif mean_lum >= 80.0:
-            adaptive_strength = 0.22 * strength
-            condition = "daytime_moderate"
-        elif mean_lum >= 45.0:
-            adaptive_strength = 0.60 * strength
-            condition = "twilight_mixed"
-        else:
-            adaptive_strength = 1.0 * strength
-            condition = "nighttime_lowlight"
+        # Adaptive exposure: prevents overexposure in daylight while boosting nighttime scenes
+        adaptive_strength, condition = self._exposure(mean_lum, strength)
 
         if adaptive_strength <= 0.01:
             return frame_bgr.copy(), {"condition": condition, "lum": mean_lum, "applied": False}
@@ -90,14 +134,25 @@ class LowLightStage:
         # Zero-DCE++ path (fully vectorized on GPU with fp16)
         h, w = frame_bgr.shape[:2]
         t_in = torch.from_numpy(frame_bgr).to(self.device, non_blocking=True).permute(2, 0, 1).unsqueeze(0)
-        t_rgb = (t_in[:, [2, 1, 0], :, :].half()) * (1.0 / 255.0)
-
-        if not hasattr(self, "_model_fp16_checked") and self.device.type == "cuda":
-            self.model = self.model.half()
-            self._model_fp16_checked = True
+        if self.device.type == "cuda":
+            t_rgb = (t_in[:, [2, 1, 0], :, :].half()) * (1.0 / 255.0)
+            if not hasattr(self, "_model_fp16_checked"):
+                self.model = self.model.half()
+                self._model_fp16_checked = True
+        else:
+            t_rgb = (t_in[:, [2, 1, 0], :, :].float()) * (1.0 / 255.0)
 
         with torch.inference_mode():
-            enh_t, _ = self.model(t_rgb)
+            if self.curve_downscale < 1.0:
+                # Zero-DCE++ as published: estimate the curve maps on a downscaled frame and
+                # upsample them (smoother curves, far less compute); apply at full resolution.
+                small = F.interpolate(t_rgb, scale_factor=self.curve_downscale, mode="bilinear",
+                                      align_corners=False, antialias=True)
+                _, A = self.model(small)
+                A = F.interpolate(A, size=(h, w), mode="bilinear", align_corners=False)
+                enh_t = self.model.enhance(t_rgb, A)
+            else:
+                enh_t, _ = self.model(t_rgb)
 
             # Global smooth Gray-World color balance (pure scalar multipliers):
             # Normalizes red/blue sensor biases without any per-pixel thresholds,
@@ -109,6 +164,9 @@ class LowLightStage:
             kr = torch.clamp(luma / (r_m + 1e-4), 0.45, 1.45)
             kg = torch.clamp(luma / (g_m + 1e-4), 0.70, 1.45)
             kb = torch.clamp(luma / (b_m + 1e-4), 0.70, 1.45)
+            if self.color_balance < 1.0:
+                cb = self.color_balance
+                kr, kg, kb = (1 + cb * (kr - 1)), (1 + cb * (kg - 1)), (1 + cb * (kb - 1))
             enh_clean = torch.cat([enh_t[:, 0:1] * kr, enh_t[:, 1:2] * kg, enh_t[:, 2:3] * kb], dim=1).clamp(0.0, 1.0)
 
             # Modulate with adaptive exposure strength
@@ -117,10 +175,19 @@ class LowLightStage:
             else:
                 out_t = enh_clean
 
-            out_bgr_t = out_t[:, [2, 1, 0], :, :].clamp(0.0, 1.0) * 255.0
-            out_bgr = np.ascontiguousarray(out_bgr_t.squeeze(0).byte().permute(1, 2, 0).cpu().numpy())
+            out_bgr_t = out_t[:, [2, 1, 0], :, :].float().clamp(0.0, 1.0) * 255.0
+            # round (the previous .byte() truncated, darkening every pixel by 0.5 level on average)
+            out_bgr = np.ascontiguousarray(out_bgr_t.round().squeeze(0).byte().permute(1, 2, 0).cpu().numpy())
 
-        return out_bgr, {"condition": condition, "lum": mean_lum, "applied": True}
+        if self.clahe_clip > 0:
+            lab = cv2.cvtColor(out_bgr, cv2.COLOR_BGR2LAB)
+            if not hasattr(self, "_clahe") or self._clahe_clip_used != self.clahe_clip:
+                self._clahe = cv2.createCLAHE(clipLimit=self.clahe_clip, tileGridSize=(8, 8))
+                self._clahe_clip_used = self.clahe_clip
+            lab[:, :, 0] = self._clahe.apply(lab[:, :, 0])
+            out_bgr = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+
+        return out_bgr, {"condition": condition, "lum": mean_lum, "applied": True, "strength": round(adaptive_strength, 3)}
 
 
 class NeuralDenoiseStage:
@@ -136,74 +203,57 @@ class NeuralDenoiseStage:
         tile_size: int = 512,
         tile_pad: int = 16,
         fp16: bool = True,
-        fast_mode: bool = False
+        fast_mode: bool = False,
+        full_frame_max_px: int = 0
     ):
         self.device = device
         self.tile_size = tile_size
         self.tile_pad = tile_pad
         self.fp16 = fp16
         self.fast_mode = fast_mode
+        # Largest frame (in pixels) that may run untiled within this GPU's VRAM budget.
+        # Untiled is faster and seam-free: 512 px tiles + 2x16 px overlap, padded by SCUNet to a
+        # multiple of 64, roughly double the computed area of a 720p frame.
+        self.full_frame_max_px = full_frame_max_px
+        self.tile_state: Dict[str, Any] = {}
 
         w_path = get_weights_path("scunet_color_real_psnr")
         import spandrel
         loader = spandrel.ModelLoader()
         self.model = loader.load_from_file(str(w_path)).to(self.device).eval()
-        if self.fp16 and self.device.type == 'cuda':
-            self.model = self.model.half()
-        logger.info("SCUNet neural denoiser loaded on %s (tile_size=%d, fast_mode=%s)", device, tile_size, fast_mode)
+        self.patched_modules = accelerate_scunet(self.model)
+        if self.device.type == 'cuda':
+            if self.fp16:
+                self.model = self.model.half()
+            self.model.model.to(memory_format=_CL)
+        logger.info("SCUNet neural denoiser loaded on %s (tile_size=%d, fast_mode=%s, full_frame_max_px=%d, "
+                    "accelerated modules=%d)", device, tile_size, fast_mode, full_frame_max_px, self.patched_modules)
+
+    def _infer(self, tensor: torch.Tensor) -> torch.Tensor:
+        """Full frame when it fits the VRAM budget, otherwise tiled; an OOM degrades to smaller tiles."""
+        h, w = tensor.shape[2:]
+        untiled = (h * w <= self.full_frame_max_px) and not self.tile_state.get("tile_size")
+        tile = max(h, w) if untiled else self.tile_size
+        with torch.inference_mode():
+            return run_tiled_inference(self.model, tensor, tile_size=tile, tile_pad=self.tile_pad,
+                                       scale=1, fp16=self.fp16, tile_state=self.tile_state)
 
     def process_frame(self, frame_bgr: np.ndarray, strength: float = 1.0) -> np.ndarray:
         if strength <= 0.05:
             return frame_bgr
 
         h, w = frame_bgr.shape[:2]
+        half = self.fp16 and self.device.type == 'cuda'
 
         if self.fast_mode and (h > 720 or w > 1280):
-            # For 1080p+ videos in fast mode: downsample untiled to maintain fast throughput
+            # For 1080p+ videos in fast mode: denoise at half resolution to maintain fast throughput
             sh, sw = (h // 2 // 2) * 2, (w // 2 // 2) * 2
             small = cv2.resize(frame_bgr, (sw, sh), interpolation=cv2.INTER_AREA)
-            rgb_s = cv2.cvtColor(small, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
-            t_in = torch.from_numpy(rgb_s).permute(2, 0, 1).unsqueeze(0).to(self.device)
-            if self.fp16 and self.device.type == 'cuda':
-                t_in = t_in.half()
-            with torch.inference_mode():
-                out_tensor = self.model(t_in)
-            out_s = out_tensor.squeeze(0).clamp(0.0, 1.0).permute(1, 2, 0).float().cpu().numpy()
-            out_s_bgr = cv2.cvtColor((out_s * 255.0).round().astype(np.uint8), cv2.COLOR_RGB2BGR)
+            out_s_bgr = _tensor_to_bgr(self._infer(_bgr_to_tensor(small, self.device, half)), sh, sw)
             denoised_bgr = cv2.resize(out_s_bgr, (w, h), interpolation=cv2.INTER_LANCZOS4)
-        elif self.fast_mode:
-            # For <= 720p (e.g. 480p/720p dashcam footage): run native 1x resolution padded to 32
-            # Eliminates severe downsampling blur while running faster on modern GPUs
-            pad_h = (32 - (h % 32)) % 32
-            pad_w = (32 - (w % 32)) % 32
-            padded = cv2.copyMakeBorder(frame_bgr, 0, pad_h, 0, pad_w, cv2.BORDER_REFLECT) if (pad_h > 0 or pad_w > 0) else frame_bgr
-            rgb_pad = cv2.cvtColor(padded, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
-            t_in = torch.from_numpy(rgb_pad).permute(2, 0, 1).unsqueeze(0).to(self.device)
-            if self.fp16 and self.device.type == 'cuda':
-                t_in = t_in.half()
-            with torch.inference_mode():
-                out_tensor = self.model(t_in)
-            out_np = (out_tensor.squeeze(0).clamp(0.0, 1.0).permute(1, 2, 0).float().cpu().numpy() * 255.0).round().astype(np.uint8)
-            denoised_bgr = cv2.cvtColor(out_np[:h, :w], cv2.COLOR_RGB2BGR)
         else:
-            rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
-            tensor = torch.from_numpy(rgb).permute(2, 0, 1).unsqueeze(0).to(self.device)
-            if self.fp16 and self.device.type == 'cuda':
-                tensor = tensor.half()
-
-            with torch.inference_mode():
-                out_tensor = run_tiled_inference(
-                    model=self.model,
-                    tensor=tensor,
-                    tile_size=self.tile_size,
-                    tile_pad=self.tile_pad,
-                    scale=1,
-                    fp16=self.fp16
-                )
-
-            out_np = out_tensor.squeeze(0).clamp(0.0, 1.0).permute(1, 2, 0).float().cpu().numpy()
-            denoised_bgr = (out_np * 255.0).round().astype(np.uint8)
-            denoised_bgr = cv2.cvtColor(denoised_bgr, cv2.COLOR_RGB2BGR)
+            # Native resolution (SCUNet pads internally to a multiple of 64 with reflection)
+            denoised_bgr = _tensor_to_bgr(self._infer(_bgr_to_tensor(frame_bgr, self.device, half)), h, w)
 
         if strength < 1.0:
             if denoised_bgr.shape != frame_bgr.shape:
@@ -266,8 +316,12 @@ class SuperResolutionStage:
             raise ValueError(f"Unknown SuperResolution model: {model_name}")
 
         self.model = self.model.to(self.device).eval()
-        if self.fp16 and self.device.type == 'cuda':
-            self.model = self.model.half()
+        if self.device.type == 'cuda':
+            if self.fp16:
+                self.model = self.model.half()
+            self.model = self.model.to(memory_format=_CL)
+        self.full_frame_max_px = 0
+        self.tile_state: Dict[str, Any] = {}
         logger.info("SuperResolution (%s, scale=%dx) loaded on %s", model_name, self.scale, device)
 
     def process_frame(
@@ -277,6 +331,8 @@ class SuperResolutionStage:
         strength: float = 1.0
     ) -> np.ndarray:
         h, w = frame_bgr.shape[:2]
+        if self.device.type == 'cuda':
+            return self._process_frame_gpu(frame_bgr, restore_at_original_res, strength)
         rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
         tensor = torch.from_numpy(rgb).permute(2, 0, 1).unsqueeze(0).to(self.device)
 
@@ -322,6 +378,37 @@ class SuperResolutionStage:
 
         return out_bgr
 
+    def _process_frame_gpu(self, frame_bgr: np.ndarray, restore_at_original_res: bool, strength: float) -> np.ndarray:
+        """Same output policy as the CPU path, but the x2/x4 frame never leaves the GPU.
+
+        The reference path copied the full x4 frame (e.g. 5120x2880 for 720p) to the CPU as
+        float32, Lanczos-upscaled the input to that size for the 0.78/0.22 anti-ringing blend
+        and then Lanczos-downscaled the result (~280 ms of CPU work per 720p frame). Blending is
+        linear, so 'blend at x4 then downscale' equals 'downscale SR, then blend with the
+        input'; the downscale uses antialiased bicubic filtering, which (unlike a Lanczos
+        decimation without prefiltering) does not alias.
+        """
+        h, w = frame_bgr.shape[:2]
+        half = self.fp16
+        x = _bgr_to_tensor(frame_bgr, self.device, half)
+        untiled = (h * w <= self.full_frame_max_px) and not self.tile_state.get("tile_size")
+        tile = max(h, w) if untiled else self.tile_size
+        with torch.inference_mode():
+            sr = run_tiled_inference(self.model, x, tile_size=tile, tile_pad=self.tile_pad,
+                                     scale=self.scale, fp16=self.fp16, tile_state=self.tile_state).float()
+            src = x.float()
+            if restore_at_original_res or (h >= 1080 or w >= 1920):
+                sr = F.interpolate(sr, size=(h, w), mode="bicubic", align_corners=False, antialias=True)
+                out = 0.78 * sr + 0.22 * src
+                if strength < 1.0:
+                    out = strength * out + (1.0 - strength) * src
+                return _tensor_to_bgr(out, h, w)
+            ref = F.interpolate(src, size=sr.shape[2:], mode="bicubic", align_corners=False)
+            out = 0.78 * sr + 0.22 * ref
+            if strength < 1.0:
+                out = strength * out + (1.0 - strength) * ref
+            return _tensor_to_bgr(out, out.shape[2], out.shape[3])
+
 
 class TemporalSmoothingStage:
     """
@@ -333,29 +420,82 @@ class TemporalSmoothingStage:
         self,
         ema_alpha: float = 0.15,
         motion_compensated: bool = True,
-        flow_scale: float = 0.5
+        flow_scale: float = 0.5,
+        device: Optional[torch.device] = None
     ):
         self.ema_alpha = ema_alpha
         self.motion_compensated = motion_compensated
         self.flow_scale = flow_scale
+        self.device = device
         self.prev_output_bgr = None
         self.prev_gray = None
+        self._prev_t = None
+        self._grid_cache = None
 
     def reset(self):
         self.prev_output_bgr = None
         self.prev_gray = None
+        self._prev_t = None
+
+    def _flow(self, curr_gray: np.ndarray, h: int, w: int) -> np.ndarray:
+        sw, sh = max(16, int(w * self.flow_scale)), max(16, int(h * self.flow_scale))
+        prev_small = cv2.resize(self.prev_gray, (sw, sh), interpolation=cv2.INTER_LINEAR)
+        curr_small = cv2.resize(curr_gray, (sw, sh), interpolation=cv2.INTER_LINEAR)
+        return cv2.calcOpticalFlowFarneback(
+            prev_small, curr_small, None,
+            pyr_scale=0.5, levels=3, winsize=15, iterations=3, poly_n=5, poly_sigma=1.1, flags=0
+        )
+
+    def _process_gpu(self, frame_bgr: np.ndarray, curr_gray: np.ndarray, strength: float) -> np.ndarray:
+        """Same algorithm as the CPU path: Farneback runs on the CPU at reduced scale (cheap);
+        the full-resolution flow upsampling, backward warp, photometric/glare masks and the
+        blend run on the GPU (they were ~75 ms of NumPy work per 720p frame)."""
+        h, w = frame_bgr.shape[:2]
+        dev = self.device
+        with torch.inference_mode():
+            cur = torch.from_numpy(frame_bgr).to(dev, non_blocking=True).permute(2, 0, 1).unsqueeze(0).float()
+            flow_small = self._flow(curr_gray, h, w)
+            flow = torch.from_numpy(flow_small).to(dev).permute(2, 0, 1).unsqueeze(0)
+            flow = F.interpolate(flow, size=(h, w), mode="bilinear", align_corners=False) * (1.0 / self.flow_scale)
+            if self._grid_cache is None or self._grid_cache[0] != (h, w):
+                gy, gx = torch.meshgrid(torch.arange(h, device=dev, dtype=torch.float32),
+                                        torch.arange(w, device=dev, dtype=torch.float32), indexing="ij")
+                self._grid_cache = ((h, w), gx, gy)
+            _, gx, gy = self._grid_cache
+            map_x = gx - flow[0, 0]
+            map_y = gy - flow[0, 1]
+            grid = torch.stack((map_x * (2.0 / max(w - 1, 1)) - 1.0, map_y * (2.0 / max(h - 1, 1)) - 1.0), dim=-1).unsqueeze(0)
+            warped = F.grid_sample(self._prev_t, grid, mode="bilinear", padding_mode="reflection", align_corners=True)
+
+            err = (cur - warped).abs().mean(dim=1, keepdim=True)
+            valid = ((24.0 - err) / 24.0).clamp(0.0, 1.0)
+            glare = (torch.from_numpy(curr_gray).to(dev) > 190).float()[None, None]
+            alpha = (self.ema_alpha * strength) * valid * (1.0 - 0.85 * glare)
+            out = ((1.0 - alpha) * cur + alpha * warped).clamp(0, 255).to(torch.uint8)  # truncation, as np.astype
+            self._prev_t = out.float()
+            return out.squeeze(0).permute(1, 2, 0).contiguous().cpu().numpy()
 
     def process_frame(self, frame_bgr: np.ndarray, strength: float = 1.0) -> np.ndarray:
         curr_gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
 
+        if (self.device is not None and self.device.type == "cuda" and self.motion_compensated
+                and self._prev_t is not None and strength > 0.05
+                and tuple(self._prev_t.shape[2:]) == frame_bgr.shape[:2]):
+            out_bgr = self._process_gpu(frame_bgr, curr_gray, strength)
+            self.prev_output_bgr = out_bgr
+            self.prev_gray = curr_gray
+            return out_bgr
+
         if self.prev_output_bgr is None or strength <= 0.05:
             self.prev_output_bgr = frame_bgr.copy()
             self.prev_gray = curr_gray.copy()
+            self._store_prev_gpu(frame_bgr)
             return frame_bgr
 
         if self.prev_output_bgr.shape != frame_bgr.shape:
             self.prev_output_bgr = frame_bgr.copy()
             self.prev_gray = curr_gray.copy()
+            self._store_prev_gpu(frame_bgr)
             return frame_bgr
 
         h, w = frame_bgr.shape[:2]
@@ -398,4 +538,9 @@ class TemporalSmoothingStage:
 
         self.prev_output_bgr = out_bgr.copy()
         self.prev_gray = curr_gray.copy()
+        self._store_prev_gpu(out_bgr)
         return out_bgr
+
+    def _store_prev_gpu(self, out_bgr: np.ndarray) -> None:
+        if self.device is not None and self.device.type == "cuda" and self.motion_compensated:
+            self._prev_t = torch.from_numpy(out_bgr).to(self.device).permute(2, 0, 1).unsqueeze(0).float()

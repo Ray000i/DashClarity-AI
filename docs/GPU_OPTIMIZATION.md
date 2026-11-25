@@ -32,6 +32,12 @@ Nothing is estimated except where explicitly marked.
 | 9 | Fresh installs fail on balanced/quality presets | `spandrel` (SCUNet loader) missing from `requirements.txt` | Added | `requirements.txt` |
 | 10 | After a CUDA OOM the reduced tile size was forgotten, so every frame hit the same OOM again | No state kept between frames | `tile_state` remembers the working tile size | `src/pipeline/tiling.py`, `stages.py` |
 | 11 | Two tests failed on non-4060 hardware / OpenCV 5 | Asserted "RTX 4060" in the GPU name and an OpenCV 4.x error string | Hardware- and version-neutral assertions | `tests/test_application.py`, `tests/test_opencv_regression.py` |
+| 12 | Enhanced video flickered more than the input (real clip: brightness jumps of 24 levels between consecutive frames) | Low-light strength switched in hard steps (1.0 / 0.60 / 0.22 / 0.05) on each frame's own mean brightness; a scene near a threshold (the test clip averages 80.3, threshold 80) toggled every few frames | Continuous strength curve through the same values, driven by a temporally smoothed brightness with scene-cut reset | `src/pipeline/stages.py`, `enhancer.py` |
+| 13 | Low-light output 0.5 grey level too dark on average | `.byte()` truncated instead of rounding | Round before converting | `src/pipeline/stages.py` |
+| 14 | Cancelling a job left FFmpeg running and `.temp_*` files on disk | Cancel is raised as `KeyboardInterrupt`, which `except Exception` did not catch | Catch it, stop FFmpeg, delete partial files, re-raise | `src/pipeline/video_stream.py` |
+| 15 | Failed jobs left `.temp_*` files until the next restart | Cleanup only at start-up | Partial files removed on any failure | `src/pipeline/video_stream.py` |
+| 16 | Upload errors exposed the server's file system path to the browser | Exception text (containing the path) returned in the JSON error | Generic message to the client, details in the server log | `app.py` |
+| 17 | `python app.py` with the system Python ran on the CPU | System Python has a CPU-only PyTorch | `app.py` restarts itself with the project `.venv` when that environment has CUDA (opt out: `DASHCLARITY_NO_VENV_RELAUNCH=1`) | `app.py` |
 
 ## 3. Model audit
 
@@ -102,6 +108,7 @@ device-wide peak 5401 of 6141 MiB including the desktop. End-to-end app job (108
 peak 3108 MB allocated. Process RAM peaked at 1.4–2.6 GB.
 
 Stage times after (720p quality): SCUNet 729 ms, Real-ESRGAN 210 ms, Zero-DCE++ 38 ms, temporal 35 ms.
+With the quality changes of §7b, Zero-DCE++ dropped further to 8.8 ms per 720p frame (curves estimated at 1/4 resolution).
 
 ## 7. Quality (no regressions)
 
@@ -125,31 +132,128 @@ mismatch dominates; use these numbers to compare presets and versions, not as ab
 
 Visual comparison: `results/gpu_benchmark/comparison_before_after.png`.
 
-## 8. Video reliability (verified with FFmpeg on real outputs)
+## 7b. Enhancement quality improvements (low-light stage)
 
-| Check | Result |
-|---|---|
-| Frame rate | preserved (30 → 30, 25 → 25) |
-| Frame count | 300 → 300, 100 → 100 decoded |
-| Resolution | preserved (626x360, 1920x1080) |
-| Duration | equals processed frames / fps (10.00 s, 4.00 s) |
-| Audio | original track copied (AAC 128 kb/s kept), trimmed to video length |
-| Colour | BT.709 matrix and tags; round-trip error 2–4 levels (H.264 4:2:0) |
+Controlled experiments (`scripts/quality_experiments.py`, balanced preset, identical inputs; one setting
+changed per variant; results in `results/gpu_benchmark/quality_experiments_balanced*.json`):
+
+| Variant | PSNR | SSIM | LPIPS ↓ | Temporal err ↓ | Real NIQE ↓ | Real BRISQUE ↓ | Real noise ↓ | Real flicker ↓ | Zero-DCE ms |
+|---|---|---|---|---|---|---|---|---|---|
+| V0 original (step exposure) | 12.77 | 0.7099 | 0.4699 | 3.849 | 8.46 | 70.86 | 0.284 | 2.48 | 37.4 |
+| V1 smooth exposure | 12.77 | 0.7099 | 0.4699 | 3.849 | 8.49 | 70.81 | 0.290 | **1.26** | 37.4 |
+| V2 curves at 1/12 res | 12.92 | 0.7088 | 0.4760 | 3.851 | 8.47 | 72.50 | 0.257 | 1.27 | 8.2 |
+| V3 curves at 1/4 res | 12.84 | 0.7119 | 0.4759 | 3.862 | 8.38 | 71.13 | 0.275 | 1.27 | 8.2 |
+| V4 gray-world 50% | 12.98 | 0.7102 | **0.4509** | 3.836 | 8.40 | 70.52 | 0.293 | 1.25 | 37.4 |
+| V5 gray-world off | 13.17 | 0.7105 | 0.4523 | 3.840 | 8.41 | 70.66 | 0.291 | 1.26 | 37.1 |
+| V6 CLAHE 1.5 | 14.47 | 0.7487 | 0.4682 | 5.190 | 7.16 | 47.58 | 0.536 | 0.97 | 40.5 |
+| V7 CLAHE 2.5 | 14.90 | 0.7407 | 0.4895 | 6.226 | 6.75 | 42.17 | 0.632 | 0.85 | 43.8 |
+| **V8 adopted (V1 + V3 + V4)** | **13.05** | **0.7123** | **0.4569** | 3.854 | **8.36** | 71.10 | **0.275** | **1.27** | **8.8** |
+| input (real clip) | – | – | – | – | 7.16 | 62.03 | 0.288 | 1.61 | – |
+
+Adopted defaults (configurable in `config.yaml` → `models.low_light_tuning`): smooth exposure, curves estimated
+at 1/4 resolution (the published Zero-DCE++ design), gray-world at 50%. CLAHE raised NIQE/BRISQUE/PSNR but
+increased temporal error by 35–62% and doubled noise, so it is off by default (kept as an option).
+Honest note: NIQE/BRISQUE of the real clip are better for the untouched input than for any enhanced output;
+the input is already moderately exposed (mean luma 80) and brightening it raises these naturalness scores.
+
+**Full-video comparison** (150-frame real night clip, each version's own pipeline + encoder, `scripts/compare_versions.py`):
+
+| Preset | Original code | Improved code | Flicker original → improved (input 0.87) | Mean luma |
+|---|---|---|---|---|
+| balanced | 161.9 s (0.93 FPS) | 113.9 s (1.32 FPS), 1.42x | 1.21 → **0.66** | 102.6 → 102.3 |
+| quality | 273.7 s (0.55 FPS) | 186.3 s (0.81 FPS), 1.47x | 1.21 → **0.66** | 103.3 → 103.0 |
+
+At frame 22 the input brightens 79.1 → 80.2 and the original output *darkens* 117 → 93 (the step bug);
+the improved output follows the input (107 → 108 → 113 → 116). Side-by-side videos (input | original |
+improved): `results/gpu_benchmark/video_comparison/side_by_side_*.mp4`; stills: `most_different_frames.png`.
+A first improved balanced run measured 143 s right after a long GPU workload; re-run under the same thermal
+conditions as the original it took 113.9 s — laptop GPU clocks vary, so compare runs made back to back.
+
+## 7c. Batch size, model loading and memory monitoring
+
+Measured throughput on the RTX 4050 (fp16, channels-last, 720p):
+
+| Model | batch 1 | batch 2 | batch 4 |
+|---|---|---|---|
+| SCUNet | 1.68 fps / 1364 MB | 1.57 fps / 2680 MB | 1.15 fps / 5312 MB |
+| Real-ESRGAN x4 | 5.19 fps / 306 MB | 5.20 fps / 564 MB | 5.21 fps / 1082 MB |
+| Zero-DCE++ (1/4-res curves) | 656 fps | 953 fps | 704 fps |
+
+A single 720p frame already saturates this GPU, so larger batches add VRAM without adding throughput (SCUNet
+gets slower). Batch size 1 is therefore the measured optimum on 6 GB and is kept; the temporal stage also
+needs frames in order. Memory is adapted through tile size / untiled limits instead (§5).
+
+* **Model unloading**: on GPUs with a budget below 6 GB (`unload_unused_models` in the profile) models not used
+  by the active preset are released when the preset changes; cached allocator memory is returned to the
+  driver after every job (`release_cached_memory`), so the desktop and other apps get it back.
+* **Monitoring**: `GET /api/system/status` now returns live VRAM (`allocated/reserved/peak/device free`), the
+  driver, the CUDA build and the adaptive profile; each job log records its peak allocated / reserved VRAM and
+  the budget.
+
+## 8. Video reliability — end-to-end upload tests
+
+`scripts/make_test_videos.py` builds 14 test files from footage in the repo; `scripts/e2e_upload_check.py`
+uploads each through the web API, enhances it, and checks the preview, streaming (HTTP 206), download,
+side-by-side comparison, thumbnail and the output file itself with FFmpeg. Final run:
+**23 / 23 cases passed** (`results/e2e_upload_check.json`).
+
+| Case | Preset / options | Output check (all passed) |
+|---|---|---|
+| 720p MP4 + AAC | balanced, fast (strength 0.5), classical_baseline, stcd_comparison, hybrid_scunet_stcd | 90 frames, 30 fps, 3.00 s, audio 3.00 s |
+| 720p MP4 + AAC | frame_skip 2 | 45 frames at 15 fps, 3.00 s, audio in sync |
+| 720p MP4 + AAC | max_seconds 1 | 30 frames, video 1.00 s, audio 0.98 s |
+| 720p MP4 + AAC | quality, restore_at_original_res=false | 5120x2880 (x4), 0.5 s, audio kept |
+| 720p MP4 + AAC | cancel after 4 frames | cancelled, FFmpeg stopped, no partial files |
+| 641x361 4:4:4 H.264 + AAC | quality | 640x360 (even size required by H.264 4:2:0), 2.00 s |
+| Phone video rotated 90° | fast | 720x1280 upright, no leftover rotation tag |
+| AVI (MJPEG + PCM) | balanced | preview transcoded to H.264; PCM audio kept |
+| MOV + AAC / MKV + Opus | classical_baseline / balanced | audio stream-copied, lengths match |
+| Variable frame rate + MP3 | fast | 2.90 s video vs 2.95 s input, audio 2.88 s |
+| 2-frame clip | quality | 2 frames out |
+| HEVC 10-bit | fast | decoded, preview transcoded to H.264 |
+| Daylight 720p | balanced | not over-brightened (adaptive exposure) |
+| 1080p 25 fps + AAC | quality | 50 frames, 25 fps, 2.00 s, untiled SCUNet |
+| 4K 3840x2160 | balanced, quality | correct size and duration; SCUNet tiled automatically |
+| Truncated MP4 / text file named .mp4 | upload | rejected with HTTP 400, no server path in the message |
+
+Peak VRAM over the whole run (including 4K): **3543 MB allocated** (budget 4673 MB).
+Processing speed reported in the app for these jobs: fast 47–108 FPS, balanced 1.4–5.6 FPS depending on
+resolution, quality 0.37 FPS at 1080p, 0.1 FPS at 4K.
+
+Earlier single-job checks: 30 → 30 fps / 300 → 300 frames (WhatsApp clip, 10 s of 22.5 s with audio trimmed),
+25 → 25 fps / 100 → 100 frames (1080p), BT.709 colour round-trip error 2–4 levels.
 
 ## 9. Tests
 
-`python -m unittest tests/test_opencv_regression.py tests/test_application.py tests/test_ui.py` →
-**19 passed, 0 failed** (on the `.venv` CUDA build).
+`python -m unittest tests/test_opencv_regression.py tests/test_application.py tests/test_ui.py tests/test_gpu_optimizations.py`
+→ **30 passed, 0 failed** (on the `.venv` CUDA build). New file `tests/test_gpu_optimizations.py` covers the
+adaptive profile (6 GB, busy 6 GB, 8 GB, CPU), OOM tile memory, exposure continuity and scene-cut reset,
+SCUNet patch equivalence, audio trimming + BT.709 tags, and cleanup on cancel.
+End-to-end: 23 / 23 upload cases (§8).
 
 ## 10. Remaining limitations
 
 * SCUNet is still ~70–75% of frame time in balanced/quality. Remaining cost is spread across LayerNorm
   (memory-bound at 64 channels), concatenation and convolutions; `torch.compile` could fuse these but
   needs Triton, which is not available for this Windows/Python 3.14 setup.
-* Frames are processed one at a time; batching is not used because the temporal stage depends on the
-  previous output frame, and single 720p/1080p frames already fill the GPU.
-* Zero-DCE++ (38 ms at 720p, 88 ms at 1080p) and STCD were not optimised.
+* Batch size stays 1: measured larger batches give no throughput gain on this GPU (§7c).
+* STCD was not optimised (fp32, untiled).
 * The OOM fallback can still demote a preset as a last resort (after tile sizes down to 192 px fail).
-* RTX 4060 behaviour is derived, not measured.
+* RTX 4060 behaviour is derived from the same measured per-pixel memory figures, not tested on an RTX 4060.
 * `templates/about.html` still quotes the original author's RTX 4060 measurements.
-* The app must be started from `.venv` (`run_app.bat`); `python app.py` with the system Python runs on the CPU.
+* NIQE / BRISQUE are installed through `pyiqa` without its full dependency tree (installed with `--no-deps`
+  plus only the modules it imports); they are optional and only used by the benchmark scripts.
+* Laptop GPU clocks vary with temperature (2.0–2.7 GHz observed); compare timings measured back to back.
+
+## 11. Modified and new files
+
+Modified: `app.py`, `config.yaml`, `requirements.txt`, `README.md`, `src/pipeline/enhancer.py`,
+`src/pipeline/stages.py`, `src/pipeline/tiling.py`, `src/pipeline/video_stream.py`, `src/utils/metrics.py`,
+`src/video_processor.py`, `tests/test_application.py`, `tests/test_opencv_regression.py`.
+
+New: `src/hardware.py`, `src/models/scunet_fast.py`, `scripts/benchmark_gpu.py`, `scripts/quality_experiments.py`,
+`scripts/compare_versions.py`, `scripts/make_test_videos.py`, `scripts/e2e_upload_check.py`,
+`tests/test_gpu_optimizations.py`, this report, and results under `results/gpu_benchmark/` and `results/e2e_upload_check*.json`.
+
+Original code backup: `../backup_before_gpu_work_2026-11-25/` (taken at commit 5c3da41 plus the then-uncommitted
+`stages.py` change).

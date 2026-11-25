@@ -112,4 +112,5 @@ if __name__ == "__main__":
     if a.diff:
         diff(a.diff[0], a.diff[1], a.reference)
     else:
-        run(Path(a.root).resolve(), str(Path(a.input).resolve()), str(Path(a.output).resolve()), a.preset, a.json)
+        run(Path(a.root).resolve(), str(Path(a.input).resolve()), str(Path(a.output).resolve()), a.preset,
+            str(Path(a.json).resolve()))

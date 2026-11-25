@@ -168,8 +168,8 @@ class LowLightStage:
             y_local = F.avg_pool2d(y_local, kernel_size=15, stride=1, padding=7)
             y_smooth = 0.60 * y_local + 0.40 * y_in
 
-            # Smooth C-infinity rational toe mask (preserves deep black night skies; relaxes on uniform dark scenes)
-            eff_tau = 0.036 * (1.0 - 0.50 * dark_assist)
+            # Smooth C-infinity rational toe mask (preserves deep black night skies & curbs sky flare lift)
+            eff_tau = 0.036 * (1.0 - 0.42 * dark_assist)
             w_toe = (y_smooth ** 2) / (y_smooth ** 2 + (eff_tau ** 2))
 
             # Smoothstep highlight anti-bloom knee (protects oncoming vehicle headlights & street lamps)
@@ -178,14 +178,31 @@ class LowLightStage:
 
             y_target = y_in + (y_dce_adj - y_in) * (w_toe * w_hi * adap_str)
 
-            # Chromaticity-preserving Retinex gain scaling: scales RGB identically -> zero hue distortion!
-            gain = torch.clamp(y_target / (y_in + 2e-3), 0.95, 7.2)
+            # Luminance gain up to 7.0x restores dark road details cleanly
+            gain = torch.clamp(y_target / (y_in + 2e-3), 0.95, 7.0)
 
-            # Smooth near-black IR dark-current chroma stabilization (only softens black sensor noise y_in < 0.035)
-            chroma_keep = 0.35 + 0.65 * ((y_in ** 2) / (y_in ** 2 + 0.028 ** 2))
-            t_neutral = y_in + (t_f - y_in) * chroma_keep
+            # Targeted dark-sky crushed-channel guard (eliminates H.264/CMOS magenta bias where G ≈ 0 in sky)
+            c_min = t_f.amin(dim=1, keepdim=True)
+            chroma_lum_w = 0.12 + 0.88 * ((y_in ** 2) / (y_in ** 2 + (0.034 ** 2)))
+            crushed_w = torch.clamp(c_min / 0.032, 0.10, 1.0)
+            shadow_zone = torch.clamp((0.18 - y_in) / 0.10, 0.0, 1.0)
+            min_guard = 1.0 - shadow_zone * (1.0 - crushed_w)
 
-            out_f = t_neutral * gain
+            # Balanced chrominance scaling + shadow red-air taillight flare damper:
+            # Scales luminance by full `gain` while curbing extreme R>G red fog amplification in y < 0.26
+            chroma_gain = torch.where(
+                gain >= 1.0,
+                torch.pow(gain.clamp(min=1.0), 0.78).clamp(max=2.80),
+                gain
+            )
+            r_dom = F.relu(t_f[:, 0:1] - t_f[:, 1:2])
+            red_sat = r_dom / (y_in + 0.04)
+            flare_damp = (
+                1.0 - 0.78 * torch.clamp((red_sat - 0.30) / 0.70, 0.0, 1.0)
+                * torch.clamp((0.26 - y_in) / 0.15, 0.0, 1.0)
+            )
+
+            out_f = y_in * gain + (t_f - y_in) * (chroma_lum_w * min_guard * chroma_gain * flare_damp)
 
             # Soft highlight rolloff shoulder (>0.88) to retain specular edge texture without harsh clipping
             excess = F.relu(out_f - 0.88)

@@ -50,43 +50,31 @@ DashClarity AI implements a modular, four-stage video restoration pipeline:
 
 ```mermaid
 flowchart LR
-    A["Raw Dashcam Frame (t)"] --> B["Stage 1: Zero-DCE++"]
-    B -->|"Illumination Boosted"| C["Stage 2: SCUNet"]
-    C -->|"Denoised Frame"| D["Stage 3: Real-ESRGAN"]
-    D -->|"Super-Resolved"| E["Stage 4: Farnebäck Flow"]
-    E --> F["Enhanced Output Frame"]
-    
-    subgraph "Illumination Estimation"
-        B
-    end
-    subgraph "Residual CNN Denoising"
-        C
-    end
-    subgraph "Conditional GAN Super-Resolution"
-        D
-    end
-    subgraph "Sequential Temporal Modeling"
-        E
-    end
+    A[Raw Dashcam Frame] --> B[Stage 1: SCUNet<br/>Sensor Denoising]
+    B -->|Denoised| C[Stage 2: Zero-DCE++<br/>Adaptive Illumination]
+    C -->|Illuminated| D[Stage 3: Real-ESRGAN<br/>Super-Resolution]
+    D -->|Super-Resolved| E[Stage 4: Farneback Flow<br/>Temporal Stability]
+    E --> F[Enhanced Output Frame]
 ```
 
 ### Pipeline Stages
 
-1. **Stage 1 — Adaptive Illumination Estimation (Zero-DCE++):**
-   * Computes dynamic non-linear quadratic curve parameters $\mathcal{A}_n$ iteratively across 8 recurrent steps.
-   * **Daytime Guard:** Detects well-lit scenes ($\text{mean luminance} > 100$) and automatically attenuates brightening to prevent blown-out highlights.
-   * **Knee Compression:** Compresses specular highlights and headlight beams ($> 240$ intensity) to preserve street visibility.
-
-2. **Stage 2 — Deep Neural Sensor Denoising (SCUNet):**
+1. **Stage 1 — Deep Neural Sensor Denoising (SCUNet):**
    * Combines Swin Transformer windowed self-attention with deep residual convolutional blocks.
+   * Runs *before* illumination boost to avoid exponentially amplifying high-ISO CMOS sensor noise.
    * Identity skip connections ($x + \mathcal{F}(x)$) maintain gradient propagation and isolate zero-centered residual noise $\mathcal{R}(y) = y - x$.
    * **Texture Retention:** Blends 15% raw sensor signal back to preserve natural asphalt texture without synthetic plastic artifacts.
+
+2. **Stage 2 — Adaptive Illumination Estimation (Zero-DCE++):**
+   * Computes dynamic non-linear quadratic curve parameters $\mathcal{A}_n$ iteratively across 8 recurrent steps without paired training data.
+   * **Daytime Guard:** Detects well-lit scenes ($\text{mean luminance} > 100$) and automatically attenuates brightening to prevent blown-out highlights.
+   * **Knee Compression:** Compresses specular highlights and headlight beams ($> 240$ intensity) to preserve street visibility.
 
 3. **Stage 3 — Generative Super-Resolution (Real-ESRGAN):**
    * Uses an RRDBNet generator paired with a relativistic discriminator ($D_{\text{Ra}}$) to synthesize sharp, high-frequency details.
    * Lanczos band-limited filtering prevents high-frequency checkerboard ringing artifacts around sharp alphanumeric characters.
 
-4. **Stage 4 — Motion-Adaptive Temporal Consistency (Farnebäck Optical Flow):**
+4. **Stage 4 — Motion-Adaptive Temporal Consistency (Farneback Optical Flow):**
    * Computes dense optical flow fields between frame $t-1$ and frame $t$.
    * Warps previous enhanced history and applies motion-weighted exponential moving average (EMA) blending strictly in low-velocity regions, eliminating flickering without motion ghosting.
 

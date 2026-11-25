@@ -19,6 +19,7 @@ import torch
 
 import config
 from src.utils import generate_job_id, sanitize_filename, is_allowed_file, ensure_web_compatible_video
+from src.utils.hardware import detect_system_hardware, get_vram_snapshot
 from src.metadata import extract_video_metadata
 from src.video_processor import ProcessingManager, JobState
 from src.models.weights_manager import validate_weights_at_startup
@@ -108,15 +109,22 @@ def health_status():
 
 @app.route("/api/system/status", methods=["GET"])
 def api_system_status():
-    """Returns detailed GPU and deep learning runtime metrics."""
-    cuda_avail = torch.cuda.is_available()
+    """Returns detailed GPU, VRAM, system RAM, adaptive tier, and deep learning runtime metrics."""
+    hw = detect_system_hardware()
+    vram = get_vram_snapshot()
     info = {
-        "cuda_available": cuda_avail,
-        "pytorch_version": torch.__version__,
-        "device_name": torch.cuda.get_device_name(0) if cuda_avail else "CPU",
-        "device_count": torch.cuda.device_count() if cuda_avail else 0,
-        "allocated_vram_mb": round(torch.cuda.memory_allocated() / (1024**2), 2) if cuda_avail else 0.0,
-        "max_vram_mb": round(torch.cuda.max_memory_allocated() / (1024**2), 2) if cuda_avail else 0.0,
+        "cuda_available": hw["cuda_available"],
+        "pytorch_version": hw["pytorch_version"],
+        "cuda_version": hw["cuda_version"],
+        "device_name": hw["gpu_name"] if hw["cuda_available"] else "CPU",
+        "device_count": hw["device_count"],
+        "total_vram_mb": hw["total_vram_mb"],
+        "free_vram_mb": vram["free_mb"] if hw["cuda_available"] else 0.0,
+        "allocated_vram_mb": vram["allocated_mb"],
+        "max_vram_mb": vram["max_allocated_mb"],
+        "system_ram_total_gb": hw["system_ram_total_gb"],
+        "system_ram_available_gb": hw["system_ram_available_gb"],
+        "adaptive_profile": hw["profile"],
         "model_architecture": "Modular: SCUNet + Zero-DCE++ + Real-ESRGAN + Farneback",
         "weights_status": "Loaded"
     }
@@ -361,7 +369,10 @@ def api_start_enhance(job_id):
 
     data = request.get_json(silent=True) or {}
     preset = str(data.get("preset", "balanced")).lower()
-    strength = float(data.get("strength", 1.0))
+    try:
+        strength = max(0.05, min(1.0, float(data.get("strength", 1.0))))
+    except (ValueError, TypeError):
+        strength = 1.0
 
     max_seconds = data.get("max_seconds", None)
     if max_seconds is not None:
@@ -369,10 +380,13 @@ def api_start_enhance(job_id):
             max_seconds = float(max_seconds)
             if max_seconds <= 0:
                 max_seconds = None
-        except ValueError:
+        except (ValueError, TypeError):
             max_seconds = None
 
-    frame_skip = int(data.get("frame_skip", 1))
+    try:
+        frame_skip = max(1, int(data.get("frame_skip", 1)))
+    except (ValueError, TypeError):
+        frame_skip = 1
     restore_at_original_res = data.get("restore_at_original_res", None)
 
     stage_overrides = None

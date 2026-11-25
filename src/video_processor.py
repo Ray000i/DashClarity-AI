@@ -17,11 +17,13 @@ from typing import Dict, Any, Optional, List, Tuple
 
 import cv2
 import numpy as np
+import torch
 
 import config
 from src.pipeline.enhancer import VideoEnhancementPipeline
 from src.pipeline.video_stream import StreamingVideoProcessor
 from src.utils.metrics import evaluate_video_metrics
+from src.utils.hardware import safe_cuda_cleanup, get_vram_snapshot
 from src.utils import get_ffmpeg_binary
 
 logger = logging.getLogger("DashClarity.Processor")
@@ -166,8 +168,6 @@ class ProcessingManager:
 
             if out_candidate.exists():
                 input_matches = list(config.UPLOAD_DIR.glob(f"*{job_id}*"))
-                if not input_matches:
-                    input_matches = list(config.UPLOAD_DIR.glob("sample_*.mp4"))
                 input_path = str(input_matches[0]) if input_matches else str(out_candidate)
 
                 job = JobState(job_id, input_path)
@@ -343,9 +343,16 @@ class ProcessingManager:
         metrics_json_path = config.OUTPUT_DIR / f"enhanced_{job.job_id}.json"
 
         try:
+            if torch.cuda.is_available():
+                torch.cuda.reset_peak_memory_stats()
+
             pipeline = self.get_pipeline()
+            pipeline.warmup()
             pipeline.reset_temporal()
-            job.add_log(f"Compute hardware initialized: {pipeline.device} (fp16={pipeline.fp16})")
+            job.add_log(
+                f"Compute hardware initialized: {pipeline.device} "
+                f"(tier={pipeline.gpu_tier}, tile={pipeline.tile_size}, fp16={pipeline.fp16})"
+            )
 
             # Initialize Streaming Processor
             streamer = StreamingVideoProcessor(
@@ -395,7 +402,8 @@ class ProcessingManager:
                     frame_neighbor=prev,
                     preset=preset,
                     strength=strength,
-                    restore_at_original_res=restore_at_original_res
+                    restore_at_original_res=restore_at_original_res,
+                    stage_overrides=stage_overrides
                 )
 
             # Execute streaming video processing
@@ -431,8 +439,13 @@ class ProcessingManager:
                 orig_res=f"{streamer.in_width}x{streamer.in_height}",
                 enh_res=f"{result_info['out_width']}x{result_info['out_height']}",
                 orig_fps=streamer.fps,
-                metrics_json_path=str(metrics_json_path)
+                metrics_json_path=str(metrics_json_path),
+                total_frames_processed=result_info["total_frames_processed"]
             )
+
+            vram_snap = get_vram_snapshot()
+            job.add_log(f"Peak VRAM usage for job: {vram_snap['max_allocated_mb']:.1f} MB (reserved {vram_snap['reserved_mb']:.1f} MB)")
+            safe_cuda_cleanup(collect_gc=False)
 
             # Generate thumbnail for history view
             self.get_or_create_thumbnail(job.job_id)

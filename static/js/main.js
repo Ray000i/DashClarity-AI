@@ -8,6 +8,7 @@ let activeJobId = null;
 let pollingTimer = null;
 let currentViewMode = "split"; // "split" or "side"
 let loupeActive = false;
+let loadedPresetsMap = {};
 
 // Transport Player References
 let origPlayer = null;
@@ -96,14 +97,19 @@ function loadPresets() {
                 return;
             }
 
+            loadedPresetsMap = {};
+            presets.forEach(p => { loadedPresetsMap[p.key] = p; });
+
             const recommendedKeys = ["fast", "balanced", "quality"];
             const recommended = presets.filter(p => recommendedKeys.includes(p.key));
             const ablation = presets.filter(p => !recommendedKeys.includes(p.key));
 
             let html = "";
+            let selectedPresetKey = null;
             // Render Recommended presets
             recommended.forEach((p, index) => {
                 const isSelected = p.key === "balanced" || (index === 0 && !presets.some(x => x.key === "balanced"));
+                if (isSelected) selectedPresetKey = p.key;
                 html += renderPresetCard(p, isSelected);
             });
 
@@ -123,11 +129,26 @@ function loadPresets() {
             }
 
             container.innerHTML = html;
+            if (selectedPresetKey) syncStageCheckboxes(selectedPresetKey);
         })
         .catch(err => {
             console.error("Failed to load presets:", err);
             container.innerHTML = `<div style="padding: 0.5rem; color: var(--state-alert);">Could not load presets from configuration.</div>`;
         });
+}
+
+function syncStageCheckboxes(presetKey) {
+    const p = loadedPresetsMap[presetKey];
+    if (!p) return;
+    const cbDenoise = document.getElementById("toggle-stage-denoise");
+    const cbLowLight = document.getElementById("toggle-stage-lowlight");
+    const cbSR = document.getElementById("toggle-stage-sr");
+    const cbTemporal = document.getElementById("toggle-stage-temporal");
+
+    if (cbDenoise) cbDenoise.checked = Boolean(p.enable_neural_denoise || p.enable_classical_denoise);
+    if (cbLowLight) cbLowLight.checked = Boolean(p.enable_low_light);
+    if (cbSR) cbSR.checked = Boolean(p.enable_super_res);
+    if (cbTemporal) cbTemporal.checked = Boolean(p.enable_temporal);
 }
 
 function selectPreset(presetKey, elem) {
@@ -138,6 +159,7 @@ function selectPreset(presetKey, elem) {
 
     const input = document.getElementById("param-preset");
     if (input) input.value = presetKey;
+    syncStageCheckboxes(presetKey);
 }
 
 function handleSelectedFile(file) {

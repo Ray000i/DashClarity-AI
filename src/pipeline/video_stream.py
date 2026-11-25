@@ -64,9 +64,9 @@ class StreamingVideoProcessor:
         self.audio_extracted = False
         self.audio_warning = None
 
-    def extract_audio(self) -> bool:
+    def extract_audio(self, target_duration_sec: Optional[float] = None) -> bool:
         """
-        Extracts original audio track for final multiplexing.
+        Extracts original audio track (clipped to target_duration_sec if set) for final multiplexing.
         Catches specific Subprocess/OS errors and logs clearly without silent bare excepts.
         """
         cmd = [
@@ -74,10 +74,14 @@ class StreamingVideoProcessor:
             "-y",
             "-i", str(self.input_path),
             "-vn",
+        ]
+        if target_duration_sec is not None and target_duration_sec > 0:
+            cmd.extend(["-t", f"{target_duration_sec:.3f}"])
+        cmd.extend([
             "-acodec", "aac",
             "-b:a", "192k",
             str(self.audio_temp_path)
-        ]
+        ])
         try:
             res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=45)
             if res.returncode == 0 and self.audio_temp_path.exists() and self.audio_temp_path.stat().st_size > 100:
@@ -105,22 +109,26 @@ class StreamingVideoProcessor:
         """
         Streams frames through the enhancement function directly into FFmpeg stdin.
         """
-        # 1. Extract audio in background
-        self.extract_audio()
-
-        # Read first frame to determine enhanced output dimensions
+        # Read first frame early to verify actual decoded dimensions (handles EXIF rotation & odd dimensions)
         self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
         ret, first_frame = self.cap.read()
         if not ret or first_frame is None:
             raise ValueError("Unable to read first video frame.")
 
+        self.in_height, self.in_width = first_frame.shape[:2]
+
+        # Extract audio trimmed to max_seconds (or full video duration) for exact A/V duration alignment
+        target_dur = (self.total_target_frames * self.frame_skip) / max(1.0, self.fps)
+        self.extract_audio(target_duration_sec=target_dur if self.max_seconds else None)
+
         test_enh, _ = frame_transform_fn(first_frame, None)
         raw_out_h, raw_out_w = test_enh.shape[:2]
         # Ensure dimensions are even numbers for libx264 yuv420p
-        out_w = (raw_out_w // 2) * 2
-        out_h = (raw_out_h // 2) * 2
+        out_w = max(2, (raw_out_w // 2) * 2)
+        out_h = max(2, (raw_out_h // 2) * 2)
         if raw_out_w != out_w or raw_out_h != out_h:
             test_enh = cv2.resize(test_enh, (out_w, out_h), interpolation=cv2.INTER_LINEAR)
+        test_enh = np.ascontiguousarray(test_enh)
 
         temp_video_out = self.output_path.with_suffix(".temp_enh.mp4")
         ffmpeg_log_path = self.output_path.with_suffix(".ffmpeg.log")
@@ -241,7 +249,7 @@ class StreamingVideoProcessor:
         finally:
             self.cap.release()
 
-        # 4. Final Mux with Audio (if audio was extracted)
+        # 4. Final Mux with Audio (enforces -shortest so audio never outlives video frames)
         final_cmd = [self.ffmpeg_bin, "-y", "-i", str(temp_video_out)]
         if self.audio_extracted and self.audio_temp_path.exists():
             final_cmd.extend([
@@ -249,6 +257,7 @@ class StreamingVideoProcessor:
                 "-c:v", "copy",
                 "-c:a", "aac",
                 "-b:a", "192k",
+                "-shortest",
                 "-movflags", "+faststart",
                 str(self.output_path)
             ])

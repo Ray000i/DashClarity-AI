@@ -1,0 +1,209 @@
+{
+  "tag": "improved",
+  "time": "2026-11-25 23:10:51",
+  "hardware": {
+    "torch": "2.14.1+cu130",
+    "cuda_build": "13.0",
+    "cuda_available": true,
+    "gpu": "NVIDIA GeForce RTX 4050 Laptop GPU",
+    "vram_total_mb": 6140,
+    "compute_capability": "8.9",
+    "cudnn": 92400,
+    "nvidia_smi_idle_used_mb": 852.0
+  },
+  "pipeline": {
+    "device": "cuda:0",
+    "fp16": true,
+    "tile_size": 512,
+    "profile": {
+      "tier": "6gb_class (e.g. RTX 4050 Laptop)",
+      "device": "cuda",
+      "fp16": true,
+      "vram_total_mb": 6140,
+      "vram_free_at_start_mb": 5073,
+      "vram_budget_mb": 4673,
+      "tile_size": 512,
+      "sr_tile_size": 512,
+      "scunet_full_frame_max_px": 2450583,
+      "sr_full_frame_max_px": 6943320
+    }
+  },
+  "speed": {
+    "720p_real_night/fast": {
+      "frames": 40,
+      "latency_ms_mean": 40.54,
+      "latency_ms_p95": 41.46,
+      "fps": 24.666,
+      "stage_ms_mean": {
+        "denoise_bilateral": 1.91,
+        "lowlight_zerodce": 37.6
+      },
+      "output_shape": [
+        720,
+        1280,
+        3
+      ],
+      "torch_peak_allocated_mb": 575.7,
+      "torch_peak_reserved_mb": 598.0,
+      "nvidia_smi_peak_used_mb": 3521.0,
+      "process_peak_rss_mb": 1651.2
+    },
+    "720p_real_night/balanced": {
+      "frames": 40,
+      "latency_ms_mean": 783.95,
+      "latency_ms_p95": 789.31,
+      "fps": 1.276,
+      "stage_ms_mean": {
+        "denoise_scunet": 728.23,
+        "lowlight_zerodce": 38.09,
+        "temporal_farneback": 16.78
+      },
+      "output_shape": [
+        720,
+        1280,
+        3
+      ],
+      "torch_peak_allocated_mb": 1434.2,
+      "torch_peak_reserved_mb": 1870.0,
+      "nvidia_smi_peak_used_mb": 2839.0,
+      "process_peak_rss_mb": 2143.9
+    },
+    "720p_real_night/quality": {
+      "frames": 40,
+      "latency_ms_mean": 1013.79,
+      "latency_ms_p95": 1017.83,
+      "fps": 0.986,
+      "stage_ms_mean": {
+        "denoise_scunet": 729.39,
+        "lowlight_zerodce": 38.11,
+        "super_resolution": 210.21,
+        "temporal_farneback": 35.12
+      },
+      "output_shape": [
+        720,
+        1280,
+        3
+      ],
+      "torch_peak_allocated_mb": 1473.5,
+      "torch_peak_reserved_mb": 1934.0,
+      "nvidia_smi_peak_used_mb": 2872.0,
+      "process_peak_rss_mb": 2160.6
+    },
+    "1080p_real/fast": {
+      "frames": 15,
+      "latency_ms_mean": 92.05,
+      "latency_ms_p95": 93.83,
+      "fps": 10.864,
+      "stage_ms_mean": {
+        "denoise_bilateral": 2.57,
+        "lowlight_zerodce": 87.87
+      },
+      "output_shape": [
+        1080,
+        1920,
+        3
+      ],
+      "torch_peak_allocated_mb": 1384.1,
+      "torch_peak_reserved_mb": 1436.0,
+      "nvidia_smi_peak_used_mb": 4272.0,
+      "process_peak_rss_mb": 2187.0
+    },
+    "1080p_real/balanced": {
+      "frames": 15,
+      "latency_ms_mean": 535.83,
+      "latency_ms_p95": 541.78,
+      "fps": 1.866,
+      "stage_ms_mean": {
+        "denoise_scunet": 409.12,
+        "lowlight_zerodce": 87.86,
+        "temporal_farneback": 37.02
+      },
+      "output_shape": [
+        1080,
+        1920,
+        3
+      ],
+      "torch_peak_allocated_mb": 1446.0,
+      "torch_peak_reserved_mb": 1686.0,
+      "nvidia_smi_peak_used_mb": 2619.0,
+      "process_peak_rss_mb": 2159.3
+    },
+    "1080p_real/quality": {
+      "frames": 5,
+      "latency_ms_mean": 2182.5,
+      "latency_ms_p95": 2197.48,
+      "fps": 0.458,
+      "stage_ms_mean": {
+        "denoise_scunet": 1559.44,
+        "lowlight_zerodce": 88.33,
+        "super_resolution": 467.08,
+        "temporal_farneback": 65.9
+      },
+      "output_shape": [
+        1080,
+        1920,
+        3
+      ],
+      "torch_peak_allocated_mb": 3114.9,
+      "torch_peak_reserved_mb": 4162.0,
+      "nvidia_smi_peak_used_mb": 5401.0,
+      "process_peak_rss_mb": 2157.2
+    }
+  },
+  "real_quality": {
+    "fast": {
+      "niqe": null,
+      "brisque": null,
+      "flat_noise": 0.3079,
+      "mean_luma": 108.13,
+      "flicker_luma_delta": 2.5922
+    },
+    "balanced": {
+      "niqe": null,
+      "brisque": null,
+      "flat_noise": 0.2792,
+      "mean_luma": 107.67,
+      "flicker_luma_delta": 2.4787
+    },
+    "quality": {
+      "niqe": null,
+      "brisque": null,
+      "flat_noise": 0.1907,
+      "mean_luma": 108.41,
+      "flicker_luma_delta": 2.4855
+    },
+    "input": {
+      "niqe": null,
+      "brisque": null,
+      "flat_noise": 0.2884,
+      "mean_luma": 80.27,
+      "flicker_luma_delta": 1.6087
+    }
+  },
+  "synthetic_quality": {
+    "input": {
+      "psnr": 7.0337,
+      "ssim": 0.1972,
+      "lpips": 0.8554,
+      "temporal_error": 4.2693
+    },
+    "fast": {
+      "psnr": 13.1845,
+      "ssim": 0.6418,
+      "lpips": 0.8502,
+      "temporal_error": 7.1941
+    },
+    "balanced": {
+      "psnr": 12.7117,
+      "ssim": 0.7067,
+      "lpips": 0.4719,
+      "temporal_error": 3.8438
+    },
+    "quality": {
+      "psnr": 12.7799,
+      "ssim": 0.7157,
+      "lpips": 0.4423,
+      "temporal_error": 3.6118
+    }
+  }
+}

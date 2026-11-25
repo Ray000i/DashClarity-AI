@@ -1,0 +1,23 @@
+{
+  "V8_adopted_defaults": {
+    "psnr": 13.0529,
+    "ssim": 0.7123,
+    "lpips": 0.4569,
+    "temporal_error": 3.8539,
+    "real_niqe": 8.3564,
+    "real_brisque": 71.0985,
+    "real_flat_noise": 0.2745,
+    "real_rms_contrast": 44.39,
+    "real_mean_luma": 108.68,
+    "real_flicker": 1.2666,
+    "real_lowlight_ms": 8.83
+  },
+  "input": {
+    "real_niqe": 7.1613,
+    "real_brisque": 62.0284,
+    "real_flat_noise": 0.2884,
+    "real_rms_contrast": 51.97,
+    "real_mean_luma": 80.27,
+    "real_flicker": 1.6087
+  }
+}

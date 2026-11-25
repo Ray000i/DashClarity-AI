@@ -226,6 +226,11 @@ DashClarity-AI/
    ```powershell
    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
    ```
+   Pick the CUDA build that has wheels for your Python version: on Python 3.14 with a recent driver
+   (CUDA 13), use `--index-url https://download.pytorch.org/whl/cu130`. Check the result with
+   `python -c "import torch; print(torch.__version__, torch.cuda.is_available())"`: a version ending in
+   `+cpu` or `False` means the app will run on the CPU. GPU memory settings adapt automatically to
+   6 GB (RTX 4050) and 8 GB (RTX 4060) cards; see [docs/GPU_OPTIMIZATION.md](docs/GPU_OPTIMIZATION.md).
 
 4. **Install Required Dependencies:**
    ```powershell

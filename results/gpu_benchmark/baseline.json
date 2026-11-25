@@ -1,0 +1,185 @@
+{
+  "tag": "baseline",
+  "time": "2026-11-25 22:52:04",
+  "hardware": {
+    "torch": "2.14.1+cu130",
+    "cuda_build": "13.0",
+    "cuda_available": true,
+    "gpu": "NVIDIA GeForce RTX 4050 Laptop GPU",
+    "vram_total_mb": 6140,
+    "compute_capability": "8.9",
+    "cudnn": 92400,
+    "nvidia_smi_idle_used_mb": 1451.0
+  },
+  "pipeline": {
+    "device": "cuda:0",
+    "fp16": true,
+    "tile_size": 512
+  },
+  "speed": {
+    "720p_real_night/fast": {
+      "frames": 40,
+      "latency_ms_mean": 40.63,
+      "latency_ms_p95": 41.93,
+      "fps": 24.613,
+      "stage_ms_mean": {
+        "denoise_bilateral": 1.55,
+        "lowlight_zerodce": 38.26
+      },
+      "output_shape": [
+        720,
+        1280,
+        3
+      ],
+      "torch_peak_allocated_mb": 575.7,
+      "torch_peak_reserved_mb": 618.0,
+      "nvidia_smi_peak_used_mb": 2187.0,
+      "process_peak_rss_mb": 1431.0
+    },
+    "720p_real_night/balanced": {
+      "frames": 40,
+      "latency_ms_mean": 1097.77,
+      "latency_ms_p95": 1121.64,
+      "fps": 0.911,
+      "stage_ms_mean": {
+        "denoise_scunet": 972.79
+      },
+      "output_shape": [
+        720,
+        1280,
+        3
+      ],
+      "torch_peak_allocated_mb": 1479.3,
+      "torch_peak_reserved_mb": 1832.0,
+      "nvidia_smi_peak_used_mb": 3396.0,
+      "process_peak_rss_mb": 1965.0
+    },
+    "720p_real_night/quality": {
+      "frames": 40,
+      "latency_ms_mean": 1821.49,
+      "latency_ms_p95": 1850.79,
+      "fps": 0.549,
+      "stage_ms_mean": {
+        "denoise_scunet": 1126.9,
+        "super_resolution": 553.93
+      },
+      "output_shape": [
+        720,
+        1280,
+        3
+      ],
+      "torch_peak_allocated_mb": 664.6,
+      "torch_peak_reserved_mb": 1440.0,
+      "nvidia_smi_peak_used_mb": 3001.0,
+      "process_peak_rss_mb": 2258.4
+    },
+    "1080p_real/fast": {
+      "frames": 15,
+      "latency_ms_mean": 92.46,
+      "latency_ms_p95": 94.21,
+      "fps": 10.815,
+      "stage_ms_mean": {},
+      "output_shape": [
+        1080,
+        1920,
+        3
+      ],
+      "torch_peak_allocated_mb": 1377.5,
+      "torch_peak_reserved_mb": 1420.0,
+      "nvidia_smi_peak_used_mb": 2986.0,
+      "process_peak_rss_mb": 1809.2
+    },
+    "1080p_real/balanced": {
+      "frames": 15,
+      "latency_ms_mean": 787.96,
+      "latency_ms_p95": 804.61,
+      "fps": 1.269,
+      "stage_ms_mean": {
+        "denoise_scunet": 516.0
+      },
+      "output_shape": [
+        1080,
+        1920,
+        3
+      ],
+      "torch_peak_allocated_mb": 1413.1,
+      "torch_peak_reserved_mb": 1996.0,
+      "nvidia_smi_peak_used_mb": 3562.0,
+      "process_peak_rss_mb": 1982.9
+    },
+    "1080p_real/quality": {
+      "frames": 5,
+      "latency_ms_mean": 4244.5,
+      "latency_ms_p95": 4302.48,
+      "fps": 0.236,
+      "stage_ms_mean": {
+        "denoise_scunet": 2667.59
+      },
+      "output_shape": [
+        1080,
+        1920,
+        3
+      ],
+      "torch_peak_allocated_mb": 1448.8,
+      "torch_peak_reserved_mb": 2868.0,
+      "nvidia_smi_peak_used_mb": 4428.0,
+      "process_peak_rss_mb": 2643.5
+    }
+  },
+  "real_quality": {
+    "fast": {
+      "niqe": null,
+      "brisque": null,
+      "flat_noise": 0.3079,
+      "mean_luma": 108.13,
+      "flicker_luma_delta": 2.5922
+    },
+    "balanced": {
+      "niqe": null,
+      "brisque": null,
+      "flat_noise": 0.2851,
+      "mean_luma": 107.72,
+      "flicker_luma_delta": 2.4844
+    },
+    "quality": {
+      "niqe": null,
+      "brisque": null,
+      "flat_noise": 0.4475,
+      "mean_luma": 108.45,
+      "flicker_luma_delta": 2.4889
+    },
+    "input": {
+      "niqe": null,
+      "brisque": null,
+      "flat_noise": 0.2884,
+      "mean_luma": 80.27,
+      "flicker_luma_delta": 1.6087
+    }
+  },
+  "synthetic_quality": {
+    "input": {
+      "psnr": 7.0337,
+      "ssim": 0.1972,
+      "lpips": 0.8555,
+      "temporal_error": 4.2693
+    },
+    "fast": {
+      "psnr": 13.1845,
+      "ssim": 0.6418,
+      "lpips": 0.8503,
+      "temporal_error": 7.1941
+    },
+    "balanced": {
+      "psnr": 12.7177,
+      "ssim": 0.7071,
+      "lpips": 0.4715,
+      "temporal_error": 3.8407
+    },
+    "quality": {
+      "psnr": 12.7432,
+      "ssim": 0.7099,
+      "lpips": 0.447,
+      "temporal_error": 3.6762
+    }
+  }
+}

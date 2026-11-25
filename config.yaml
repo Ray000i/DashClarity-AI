@@ -16,6 +16,11 @@ models:
   temporal_ema_alpha: 0.20
   motion_compensated: true           # Farneback dense optical flow warping
   flow_scale: 0.5                    # Downscaled optical flow for fast execution
+  low_light_tuning:                  # measured defaults, see docs/GPU_OPTIMIZATION.md
+    curve_downscale: 0.25            # Zero-DCE++ curve estimation resolution (1.0 = full resolution)
+    color_balance: 0.5               # gray-world strength 0..1
+    clahe_clip: 0.0                  # >0 enables luminance CLAHE (more contrast, more noise/flicker)
+    smooth_exposure: true            # continuous, temporally smoothed exposure strength (less flicker)
 
 super_resolution_policy:
   restore_at_original_res: false     # When true, downscales back to input dimensions (detail restoration at 1x)

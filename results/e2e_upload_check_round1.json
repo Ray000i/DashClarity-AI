@@ -1,0 +1,159 @@
+[
+  {
+    "case": "01_night_720p_aac.mp4 {\"preset\": \"balanced\"}",
+    "problems": [
+      "enhance request HTTP 202: {\"job_id\":\"040560c2e0eb\",\"message\":\"Enhancement job queued with preset 'balanced'.\",\"success\":true}\n"
+    ],
+    "job": "040560c2e0eb"
+  },
+  {
+    "case": "01_night_720p_aac.mp4 {\"preset\": \"fast\", \"strength\": 0.5}",
+    "problems": [
+      "enhance request HTTP 202: {\"job_id\":\"1a174ce0c40e\",\"message\":\"Enhancement job queued with preset 'fast'.\",\"success\":true}\n"
+    ],
+    "job": "1a174ce0c40e"
+  },
+  {
+    "case": "01_night_720p_aac.mp4 {\"preset\": \"balanced\", \"frame_skip\": 2}",
+    "problems": [
+      "enhance request HTTP 202: {\"job_id\":\"428a11b2ead6\",\"message\":\"Enhancement job queued with preset 'balanced'.\",\"success\":true}\n"
+    ],
+    "job": "428a11b2ead6"
+  },
+  {
+    "case": "01_night_720p_aac.mp4 {\"preset\": \"balanced\", \"max_seconds\": 1}",
+    "problems": [
+      "enhance request HTTP 202: {\"job_id\":\"a7d9a33fcd5f\",\"message\":\"Enhancement job queued with preset 'balanced'.\",\"success\":true}\n"
+    ],
+    "job": "a7d9a33fcd5f"
+  },
+  {
+    "case": "01_night_720p_aac.mp4 {\"preset\": \"quality\", \"max_seconds\": 0.5, \"restore_at_original_res\": false}",
+    "problems": [
+      "enhance request HTTP 202: {\"job_id\":\"e08342ef14ae\",\"message\":\"Enhancement job queued with preset 'quality'.\",\"success\":true}\n"
+    ],
+    "job": "e08342ef14ae"
+  },
+  {
+    "case": "01_night_720p_aac.mp4 {\"preset\": \"stcd_comparison\", \"max_seconds\": 1}",
+    "problems": [
+      "enhance request HTTP 202: {\"job_id\":\"4a4327dcf9b4\",\"message\":\"Enhancement job queued with preset 'stcd_comparison'.\",\"success\":true}\n"
+    ],
+    "job": "4a4327dcf9b4"
+  },
+  {
+    "case": "01_night_720p_aac.mp4 {\"preset\": \"hybrid_scunet_stcd\", \"max_seconds\": 1}",
+    "problems": [
+      "enhance request HTTP 202: {\"job_id\":\"fcbd9b37ed72\",\"message\":\"Enhancement job queued with preset 'hybrid_scunet_stcd'.\",\"success\":true}\n"
+    ],
+    "job": "fcbd9b37ed72"
+  },
+  {
+    "case": "01_night_720p_aac.mp4 {\"preset\": \"classical_baseline\"}",
+    "problems": [
+      "enhance request HTTP 202: {\"job_id\":\"e5f399c782bc\",\"message\":\"Enhancement job queued with preset 'classical_baseline'.\",\"success\":true}\n"
+    ],
+    "job": "e5f399c782bc"
+  },
+  {
+    "case": "01_night_720p_aac.mp4 {\"preset\": \"balanced\"}",
+    "problems": [
+      "enhance request HTTP 202: {\"job_id\":\"d4dc82d2d79e\",\"message\":\"Enhancement job queued with preset 'balanced'.\",\"success\":true}\n"
+    ],
+    "job": "d4dc82d2d79e"
+  },
+  {
+    "case": "02_odd_size_641x361_aac.mp4 {\"preset\": \"quality\"}",
+    "problems": [
+      "enhance request HTTP 202: {\"job_id\":\"1786a1b7bb27\",\"message\":\"Enhancement job queued with preset 'quality'.\",\"success\":true}\n"
+    ],
+    "job": "1786a1b7bb27"
+  },
+  {
+    "case": "03_portrait_rotated.mp4 {\"preset\": \"fast\"}",
+    "problems": [
+      "enhance request HTTP 202: {\"job_id\":\"e48fdf39ba7a\",\"message\":\"Enhancement job queued with preset 'fast'.\",\"success\":true}\n"
+    ],
+    "job": "e48fdf39ba7a"
+  },
+  {
+    "case": "04_avi_mjpeg_pcm.avi {\"preset\": \"balanced\"}",
+    "problems": [
+      "enhance request HTTP 202: {\"job_id\":\"6dff22e13448\",\"message\":\"Enhancement job queued with preset 'balanced'.\",\"success\":true}\n"
+    ],
+    "job": "6dff22e13448"
+  },
+  {
+    "case": "05_mov_aac.mov {\"preset\": \"classical_baseline\"}",
+    "problems": [
+      "enhance request HTTP 202: {\"job_id\":\"b0b089c6dd0e\",\"message\":\"Enhancement job queued with preset 'classical_baseline'.\",\"success\":true}\n"
+    ],
+    "job": "b0b089c6dd0e"
+  },
+  {
+    "case": "06_mkv_opus.mkv {\"preset\": \"balanced\"}",
+    "problems": [
+      "enhance request HTTP 202: {\"job_id\":\"dd747191f20c\",\"message\":\"Enhancement job queued with preset 'balanced'.\",\"success\":true}\n"
+    ],
+    "job": "dd747191f20c"
+  },
+  {
+    "case": "07_vfr_mp3.mp4 {\"preset\": \"fast\"}",
+    "problems": [
+      "enhance request HTTP 202: {\"job_id\":\"19850491559c\",\"message\":\"Enhancement job queued with preset 'fast'.\",\"success\":true}\n"
+    ],
+    "job": "19850491559c"
+  },
+  {
+    "case": "08_two_frames.mp4 {\"preset\": \"quality\"}",
+    "problems": [
+      "enhance request HTTP 202: {\"job_id\":\"d79234b9bbab\",\"message\":\"Enhancement job queued with preset 'quality'.\",\"success\":true}\n"
+    ],
+    "job": "d79234b9bbab"
+  },
+  {
+    "case": "09_hevc_10bit.mp4 {\"preset\": \"fast\"}",
+    "problems": [
+      "enhance request HTTP 202: {\"job_id\":\"390fa6118999\",\"message\":\"Enhancement job queued with preset 'fast'.\",\"success\":true}\n"
+    ],
+    "job": "390fa6118999"
+  },
+  {
+    "case": "10_daylight_720p.mp4 {\"preset\": \"balanced\"}",
+    "problems": [
+      "enhance request HTTP 202: {\"job_id\":\"f44c0ebec5e4\",\"message\":\"Enhancement job queued with preset 'balanced'.\",\"success\":true}\n"
+    ],
+    "job": "f44c0ebec5e4"
+  },
+  {
+    "case": "11_1080p_25fps_aac.mp4 {\"preset\": \"quality\"}",
+    "problems": [
+      "enhance request HTTP 202: {\"job_id\":\"c257f455014a\",\"message\":\"Enhancement job queued with preset 'quality'.\",\"success\":true}\n"
+    ],
+    "job": "c257f455014a"
+  },
+  {
+    "case": "12_4k.mp4 {\"preset\": \"balanced\", \"max_seconds\": 0.2}",
+    "problems": [
+      "enhance request HTTP 202: {\"job_id\":\"52342fc79ff9\",\"message\":\"Enhancement job queued with preset 'balanced'.\",\"success\":true}\n"
+    ],
+    "job": "52342fc79ff9"
+  },
+  {
+    "case": "12_4k.mp4 {\"preset\": \"quality\", \"max_seconds\": 0.1}",
+    "problems": [
+      "enhance request HTTP 202: {\"job_id\":\"00b009dc067f\",\"message\":\"Enhancement job queued with preset 'quality'.\",\"success\":true}\n"
+    ],
+    "job": "00b009dc067f"
+  },
+  {
+    "case": "13_corrupt.mp4",
+    "problems": [],
+    "result": "HTTP 400: Corrupt or invalid video container: OpenCV could not open video container: C:\\Users\\Prakha"
+  },
+  {
+    "case": "14_not_a_video.mp4",
+    "problems": [],
+    "result": "HTTP 400: Corrupt or invalid video container: OpenCV could not open video container: C:\\Users\\Prakha"
+  }
+]

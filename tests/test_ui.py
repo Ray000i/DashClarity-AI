@@ -113,14 +113,18 @@ class TestFrontendUI(unittest.TestCase):
             shutil.rmtree(cls.temp_dir, ignore_errors=True)
 
     def test_01_all_page_routes_return_200(self):
-        """Verifies that all 5 user-facing pages return HTTP 200 OK."""
-        routes = ["/", "/upload", f"/processing/{self.test_job_id}", f"/results/{self.test_job_id}", "/history", "/about"]
+        """Verifies that all user-facing pages return HTTP 200 OK and /history redirects."""
+        routes = ["/", "/upload", f"/processing/{self.test_job_id}", f"/results/{self.test_job_id}", "/about"]
         for r in routes:
             resp = self.client.get(r)
             self.assertEqual(resp.status_code, 200, f"Route {r} returned {resp.status_code}")
             html = resp.data.decode("utf-8")
             self.assertNotIn("FORENSIC ANALYSIS REPORT", html)
             self.assertNotIn("ORDER A", html)
+        
+        # Verify /history redirects cleanly
+        resp_hist = self.client.get("/history")
+        self.assertEqual(resp_hist.status_code, 302)
 
     def test_02_api_presets_endpoint(self):
         """Verifies /api/presets returns config presets with measured FPS and tradeoffs."""

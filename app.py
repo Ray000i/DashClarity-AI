@@ -165,10 +165,8 @@ def results_page(job_id):
 
 @app.route("/history")
 def history_page():
-    """Past enhancement jobs history page."""
-    show_all = request.args.get("show_all", "0").lower() in ("1", "true", "yes")
-    jobs = processing_manager.list_history(show_all=show_all)
-    return render_template("history.html", active_page="history", jobs=jobs, show_all=show_all)
+    """Past enhancement jobs history page (redirects to upload)."""
+    return redirect(url_for("upload_page"))
 
 
 @app.route("/about")

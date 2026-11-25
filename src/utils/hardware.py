@@ -9,11 +9,25 @@ import gc
 import sys
 import ctypes
 import logging
+import subprocess
 from typing import Dict, Any, Optional
 
 import torch
 
 logger = logging.getLogger("DashClarity.Utils.Hardware")
+
+
+def _probe_nvidia_driver() -> Optional[str]:
+    """Queries NVIDIA driver version cleanly via nvidia-smi when available."""
+    try:
+        res = subprocess.run(
+            ["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=5
+        )
+        lines = [line.strip() for line in res.stdout.splitlines() if line.strip()]
+        return lines[0] if lines else None
+    except Exception:
+        return None
 
 
 def get_system_ram_stats() -> Dict[str, float]:
@@ -58,11 +72,16 @@ def get_system_ram_stats() -> Dict[str, float]:
         return {"total_gb": 0.0, "available_gb": 0.0, "used_pct": 0.0}
 
 
-def select_gpu_profile(total_vram_gb: float, cuda_available: bool = True) -> Dict[str, Any]:
+def select_gpu_profile(
+    total_vram_gb: float,
+    cuda_available: bool = True,
+    free_vram_gb: Optional[float] = None
+) -> Dict[str, Any]:
     """
-    Selects adaptive processing parameters based on actual detected VRAM capacity.
+    Selects adaptive processing parameters based on actual detected VRAM capacity and free headroom.
     Designed to keep identical perceptual enhancement quality across RTX 4050 (6GB)
-    and RTX 4060 (8GB) while maintaining safe GPU memory bounds.
+    and RTX 4060 (8GB) while maintaining safe GPU memory bounds and enabling fast untiled SCUNet
+    inference when sufficient VRAM headroom exists.
     """
     if not cuda_available or total_vram_gb <= 0.0:
         return {
@@ -73,10 +92,26 @@ def select_gpu_profile(total_vram_gb: float, cuda_available: bool = True) -> Dic
             "fp16": False,
             "scunet_fast_scale": 0.50,
             "scunet_fast_scale_1080p": 0.50,
+            "scunet_full_frame_max_px": 0,
+            "sr_full_frame_max_px": 0,
             "sr_max_out_dim": 1920,
             "sequential_offload": True,
             "vram_headroom_mb": 0.0,
+            "vram_budget_mb": 0.0,
         }
+
+    total_mb = total_vram_gb * 1024.0
+    if free_vram_gb is not None and free_vram_gb > 0.0:
+        free_mb = min(total_mb, free_vram_gb * 1024.0)
+        budget_mb = max(512.0, min(total_mb * 0.85, free_mb - 450.0))
+    else:
+        budget_mb = max(512.0, total_mb * 0.80)
+
+    # Activation + PyTorch allocator reservation margins (~2.1 KB/px SCUNet, ~0.75 KB/px Real-ESRGAN, 750 MB reserve)
+    # Ensures 720p runs untiled on 6GB RTX 4050 (~1.75 GB resv) while keeping 1080p safely tiled on 6GB (and untiled on 8GB RTX 4060).
+    work_bytes = max(256.0, budget_mb - 750.0) * (1024.0 ** 2)
+    scunet_max_px = int(work_bytes / 2100.0)
+    sr_max_px = int(work_bytes / 750.0)
 
     if total_vram_gb >= 7.2:
         # 8 GB+ GPUs (e.g., NVIDIA GeForce RTX 4060 Laptop GPU)
@@ -88,12 +123,16 @@ def select_gpu_profile(total_vram_gb: float, cuda_available: bool = True) -> Dic
             "fp16": True,
             "scunet_fast_scale": 0.67,
             "scunet_fast_scale_1080p": 0.60,
+            "scunet_full_frame_max_px": scunet_max_px,
+            "sr_full_frame_max_px": sr_max_px,
             "sr_max_out_dim": 3840,
             "sequential_offload": False,
             "vram_headroom_mb": 1024.0,
+            "vram_budget_mb": round(budget_mb, 1),
         }
     elif total_vram_gb >= 4.8:
         # ~6 GB GPUs (e.g., NVIDIA GeForce RTX 4050 Laptop GPU)
+        # Allow untiled 720p (~0.92 MPx) when >= 3.2 GB VRAM is free; fall back to 384px tiles otherwise
         return {
             "tier": "mid_vram_6gb",
             "tile_size": 384,
@@ -102,9 +141,12 @@ def select_gpu_profile(total_vram_gb: float, cuda_available: bool = True) -> Dic
             "fp16": True,
             "scunet_fast_scale": 0.60,
             "scunet_fast_scale_1080p": 0.50,
+            "scunet_full_frame_max_px": scunet_max_px if budget_mb >= 2600.0 else 0,
+            "sr_full_frame_max_px": sr_max_px if budget_mb >= 2600.0 else 0,
             "sr_max_out_dim": 2560,
             "sequential_offload": True,
             "vram_headroom_mb": 768.0,
+            "vram_budget_mb": round(budget_mb, 1),
         }
     else:
         # <= 4 GB GPUs
@@ -116,9 +158,12 @@ def select_gpu_profile(total_vram_gb: float, cuda_available: bool = True) -> Dic
             "fp16": True,
             "scunet_fast_scale": 0.50,
             "scunet_fast_scale_1080p": 0.50,
+            "scunet_full_frame_max_px": 0,
+            "sr_full_frame_max_px": 0,
             "sr_max_out_dim": 1920,
             "sequential_offload": True,
             "vram_headroom_mb": 512.0,
+            "vram_budget_mb": round(budget_mb, 1),
         }
 
 
@@ -156,14 +201,25 @@ def detect_system_hardware(override_vram_gb: Optional[float] = None) -> Dict[str
         cudnn_ver = torch.backends.cudnn.version()
 
     effective_vram_gb = override_vram_gb if override_vram_gb is not None else total_vram_gb
-    profile = select_gpu_profile(effective_vram_gb, cuda_available=cuda_avail)
+    free_gb_for_profile = (
+        round(free_vram_mb / 1024.0, 2)
+        if (override_vram_gb is None and cuda_avail)
+        else (round(override_vram_gb * 0.85, 2) if override_vram_gb is not None else None)
+    )
+    profile = select_gpu_profile(
+        effective_vram_gb,
+        cuda_available=cuda_avail,
+        free_vram_gb=free_gb_for_profile,
+    )
     ram = get_system_ram_stats()
+    driver_ver = _probe_nvidia_driver() if cuda_avail else None
 
     return {
         "cuda_available": cuda_avail,
         "gpu_name": gpu_name,
         "device_count": torch.cuda.device_count() if cuda_avail else 0,
         "compute_capability": compute_cap,
+        "driver_version": driver_ver,
         "total_vram_mb": total_vram_mb,
         "total_vram_gb": total_vram_gb,
         "free_vram_mb": free_vram_mb,

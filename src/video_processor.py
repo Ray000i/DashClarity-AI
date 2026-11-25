@@ -318,6 +318,8 @@ class ProcessingManager:
                 )
             finally:
                 self.active_job_id = None
+                if self.pipeline is not None and hasattr(self.pipeline, "release_cached_memory"):
+                    self.pipeline.release_cached_memory()
                 self.job_queue.task_done()
 
     def _run_pipeline(
@@ -372,10 +374,6 @@ class ProcessingManager:
                 f"Ingested stream: {streamer.in_width}x{streamer.in_height} @ {streamer.fps:.1f} FPS "
                 f"({streamer.total_target_frames} frames to process)"
             )
-            if streamer.audio_extracted:
-                job.add_log("Audio stream detected and extracted for final multiplexing.")
-            else:
-                job.add_log(f"Audio note: {streamer.audio_warning or 'No audio stream.'}")
 
             last_log_frame = 0
 
@@ -411,6 +409,10 @@ class ProcessingManager:
                 frame_transform_fn=frame_fn,
                 progress_callback=on_progress
             )
+            if streamer.audio_extracted:
+                job.add_log("Original audio track preserved and synchronized to enhanced video duration.")
+            else:
+                job.add_log(f"Audio note: {streamer.audio_warning or 'No audio stream.'}")
 
             sample_origs = result_info["sample_orig_frames"]
             sample_enhs = result_info["sample_enh_frames"]

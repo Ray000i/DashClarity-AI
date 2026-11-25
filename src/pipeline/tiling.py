@@ -7,6 +7,7 @@ with automatic CUDA OOM recovery and zero redundant overlap weight-map allocatio
 
 import math
 import logging
+from typing import Any, Dict, Optional
 import torch
 
 logger = logging.getLogger("DashClarity.Pipeline.Tiling")
@@ -24,7 +25,8 @@ def run_tiled_inference(
     tile_pad: int = 16,
     scale: int = 1,
     fp16: bool = True,
-    batch_size: int = 1
+    batch_size: int = 1,
+    tile_state: Optional[Dict[str, Any]] = None
 ) -> torch.Tensor:
     """
     Executes model inference in context-padded non-overlapping spatial tiles to cap peak VRAM.
@@ -37,6 +39,7 @@ def run_tiled_inference(
         scale: Spatial upscaling factor (1 for denoising, 2 or 4 for SR).
         fp16: Whether to run half-precision (torch.float16) on CUDA.
         batch_size: Max tiles processed per batched forward pass (adapted to VRAM).
+        tile_state: Optional mutable dict remembering lowered tile/batch sizes across frames after OOM.
 
     Returns:
         Processed output tensor of shape (B, C_out, H*scale, W*scale).
@@ -44,6 +47,12 @@ def run_tiled_inference(
     b, c, h, w = tensor.shape
     device = tensor.device
     use_amp = fp16 and device.type == "cuda"
+
+    if tile_state is not None:
+        if tile_state.get("tile_size"):
+            tile_size = min(tile_size, int(tile_state["tile_size"]))
+        if tile_state.get("batch_size"):
+            batch_size = min(batch_size, int(tile_state["batch_size"]))
 
     # For small images that fit within a single tile, run directly with OOM fallback
     if max(h, w) <= tile_size:
@@ -54,6 +63,11 @@ def run_tiled_inference(
         except torch.cuda.OutOfMemoryError:
             logger.warning("CUDA OOM on single-pass frame (%dx%d). Switching to tiled execution.", w, h)
             torch.cuda.empty_cache()
+            tile_size = min(tile_size, 512)
+            batch_size = 1
+            if tile_state is not None:
+                tile_state["tile_size"] = tile_size
+                tile_state["batch_size"] = 1
 
     current_tile_size = tile_size
     current_batch = max(1, batch_size)
@@ -61,7 +75,7 @@ def run_tiled_inference(
 
     while current_tile_size >= min_tile_size:
         try:
-            return _tiled_forward(
+            out = _tiled_forward(
                 model=model,
                 tensor=tensor,
                 tile_size=current_tile_size,
@@ -70,6 +84,10 @@ def run_tiled_inference(
                 use_amp=use_amp,
                 batch_size=current_batch
             )
+            if tile_state is not None and (current_tile_size != tile_size or current_batch != batch_size):
+                tile_state["tile_size"] = current_tile_size
+                tile_state["batch_size"] = current_batch
+            return out
         except torch.cuda.OutOfMemoryError:
             torch.cuda.empty_cache()
             if current_batch > 1:

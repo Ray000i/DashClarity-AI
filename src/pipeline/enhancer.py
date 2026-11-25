@@ -65,13 +65,18 @@ class VideoEnhancementPipeline:
         if self.device.type == "cuda":
             # Keep cudnn.benchmark=False: autotuner allocates up to 5.5 GB workspace on dynamic/depthwise kernels
             torch.backends.cudnn.benchmark = False
+            torch.backends.cuda.matmul.allow_tf32 = True
+            torch.backends.cudnn.allow_tf32 = True
 
+        self.profile = hw_profile
         self.fp16 = bool(self.cfg.get("hardware", {}).get("fp16", True) and hw_profile["fp16"] and cuda_ok)
         self.tile_size = int(hw_profile["tile_size"])
         self.tile_pad = int(self.cfg.get("hardware", {}).get("tile_pad", hw_profile["tile_pad"]))
         self.tile_batch_size = int(hw_profile["tile_batch_size"])
         self.scunet_fast_scale = float(hw_profile["scunet_fast_scale"])
         self.scunet_fast_scale_1080p = float(hw_profile["scunet_fast_scale_1080p"])
+        self.scunet_full_frame_max_px = int(hw_profile.get("scunet_full_frame_max_px", 0))
+        self.sr_full_frame_max_px = int(hw_profile.get("sr_full_frame_max_px", 0))
         self.sr_max_out_dim = int(hw_profile["sr_max_out_dim"])
         self.sequential_offload = bool(hw_profile["sequential_offload"])
         self.gpu_tier = hw_profile["tier"]
@@ -99,7 +104,8 @@ class VideoEnhancementPipeline:
         self.temporal_stage = TemporalSmoothingStage(
             ema_alpha=self.cfg.get("models", {}).get("temporal_ema_alpha", 0.18),
             motion_compensated=self.cfg.get("models", {}).get("motion_compensated", True),
-            flow_scale=self.cfg.get("models", {}).get("flow_scale", 0.5)
+            flow_scale=self.cfg.get("models", {}).get("flow_scale", 0.5),
+            device=self.device
         )
 
         self.current_preset = preset
@@ -178,7 +184,8 @@ class VideoEnhancementPipeline:
                     fast_mode=fast_m,
                     tile_batch_size=self.tile_batch_size,
                     fast_scale=self.scunet_fast_scale,
-                    fast_scale_1080p=self.scunet_fast_scale_1080p
+                    fast_scale_1080p=self.scunet_fast_scale_1080p,
+                    full_frame_max_px=self.scunet_full_frame_max_px
                 )
 
         if hasattr(self, "temporal_stage"):
@@ -208,7 +215,8 @@ class VideoEnhancementPipeline:
                     tile_pad=self.tile_pad,
                     fp16=self.fp16,
                     tile_batch_size=self.tile_batch_size,
-                    max_out_dim=self.sr_max_out_dim
+                    max_out_dim=self.sr_max_out_dim,
+                    full_frame_max_px=self.sr_full_frame_max_px
                 )
 
     def warmup(self):
@@ -225,6 +233,10 @@ class VideoEnhancementPipeline:
             logger.info("GPU pipeline warmup completed cleanly on %s.", self.device)
         except Exception as e:
             logger.warning("Pipeline warmup skipped due to non-fatal error: %s", e)
+
+    def release_cached_memory(self):
+        """Releases cached GPU allocator blocks between queued jobs while retaining loaded models."""
+        safe_cuda_cleanup(collect_gc=False)
 
     def reset_temporal(self):
         """Clears temporal motion and exposure history buffers between separate video clips."""
@@ -348,15 +360,18 @@ class VideoEnhancementPipeline:
                 "output_shape": tuple(gpu_tensor.shape[-2:])
             }
 
-        # Transfer final enhanced GPU tensor back to CPU ONCE
+        # 4. Motion-Compensated Temporal Smoothing Stage (Farneback flow + GPU warp/blend)
+        if preset_cfg.get("enable_temporal", False):
+            if gpu_tensor is not None:
+                gpu_tensor = self.temporal_stage.process_frame_tensor(gpu_tensor, strength=eff_strength)
+            else:
+                current_np = self.temporal_stage.process_frame(current_np, strength=eff_strength)
+            stage_telemetry["temporal"] = "farneback_motion_compensated"
+
+        # Transfer final enhanced GPU tensor back to CPU ONCE at the very end
         if gpu_tensor is not None:
             current_np = gpu_rgb_tensor_to_bgr(gpu_tensor)
             del gpu_tensor
-
-        # 4. Motion-Compensated Temporal Smoothing Stage (Farneback optical flow)
-        if preset_cfg.get("enable_temporal", False):
-            current_np = self.temporal_stage.process_frame(current_np, strength=eff_strength)
-            stage_telemetry["temporal"] = "farneback_motion_compensated"
 
         return current_np, stage_telemetry
 

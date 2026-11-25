@@ -20,9 +20,11 @@ from src.models.zerodce import ZeroDCEPlus
 from src.models.srvgg import SRVGGNetCompact
 from src.models.rrdb import RRDBNet
 from src.models.stcd import STCDWrapper
+from src.models.scunet_fast import accelerate_scunet
 from src.models.weights_manager import get_weights_path
 from src.pipeline.tiling import run_tiled_inference
 
+_CL = torch.channels_last
 logger = logging.getLogger("DashClarity.Pipeline.Stages")
 
 
@@ -241,7 +243,8 @@ class NeuralDenoiseStage:
         fast_mode: bool = False,
         tile_batch_size: int = 1,
         fast_scale: float = 0.67,
-        fast_scale_1080p: float = 0.55
+        fast_scale_1080p: float = 0.55,
+        full_frame_max_px: int = 0
     ):
         self.device = device
         self.tile_size = tile_size
@@ -251,16 +254,24 @@ class NeuralDenoiseStage:
         self.tile_batch_size = max(1, tile_batch_size)
         self.fast_scale = fast_scale
         self.fast_scale_1080p = fast_scale_1080p
+        self.full_frame_max_px = max(0, int(full_frame_max_px))
+        self.tile_state: Dict[str, Any] = {}
 
         w_path = get_weights_path("scunet_color_real_psnr")
         import spandrel
         loader = spandrel.ModelLoader()
         self.model = loader.load_from_file(str(w_path)).to(self.device).eval()
-        if self.fp16:
-            self.model = self.model.half()
+        self.patched_modules = accelerate_scunet(self.model)
+        if self.device.type == "cuda":
+            if self.fp16:
+                self.model = self.model.half()
+            if hasattr(self.model, "model"):
+                self.model.model.to(memory_format=_CL)
+            else:
+                self.model.to(memory_format=_CL)
         logger.info(
-            "SCUNet neural denoiser loaded on %s (tile_size=%d, batch=%d, fast_mode=%s, fast_scale=%.2f)",
-            device, tile_size, self.tile_batch_size, fast_mode, fast_scale
+            "SCUNet neural denoiser loaded on %s (tile_size=%d, batch=%d, fast_mode=%s, fast_scale=%.2f, max_untiled_px=%d, sdpa_blocks=%d)",
+            device, tile_size, self.tile_batch_size, fast_mode, fast_scale, self.full_frame_max_px, self.patched_modules
         )
 
     def process_frame_tensor(self, t_rgb: torch.Tensor, strength: float = 1.0, detail_keep: float = 0.20) -> torch.Tensor:
@@ -283,6 +294,8 @@ class NeuralDenoiseStage:
             try:
                 with torch.inference_mode():
                     t_small = F.interpolate(t_in, size=(sh, sw), mode="bilinear", align_corners=False)
+                    if self.device.type == "cuda":
+                        t_small = t_small.contiguous(memory_format=_CL)
                     out_s = self.model(t_small)
                     den_up = F.interpolate(out_s.float(), size=(h, w), mode="bilinear", align_corners=False)
 
@@ -298,14 +311,18 @@ class NeuralDenoiseStage:
                 denoised = None
 
         if denoised is None:
+            untiled = (self.full_frame_max_px > 0 and (h * w <= self.full_frame_max_px) and not self.tile_state.get("tile_size"))
+            eff_tile = max(h, w) if untiled else self.tile_size
+            t_in_exec = t_in.contiguous(memory_format=_CL) if self.device.type == "cuda" else t_in
             denoised = run_tiled_inference(
                 model=self.model,
-                tensor=t_in,
-                tile_size=self.tile_size,
+                tensor=t_in_exec,
+                tile_size=eff_tile,
                 tile_pad=self.tile_pad,
                 scale=1,
                 fp16=self.fp16,
-                batch_size=self.tile_batch_size
+                batch_size=self.tile_batch_size,
+                tile_state=self.tile_state
             ).float().clamp(0.0, 1.0)
 
         # Preserve calibrated natural luma micro-texture outside dark flat noise areas while keeping chroma 100% denoised
@@ -361,7 +378,8 @@ class SuperResolutionStage:
         tile_pad: int = 16,
         fp16: bool = True,
         tile_batch_size: int = 1,
-        max_out_dim: int = 3840
+        max_out_dim: int = 3840,
+        full_frame_max_px: int = 0
     ):
         self.device = device
         self.model_name = model_name
@@ -370,6 +388,8 @@ class SuperResolutionStage:
         self.fp16 = bool(fp16 and device.type == "cuda")
         self.tile_batch_size = max(1, tile_batch_size)
         self.max_out_dim = max_out_dim
+        self.full_frame_max_px = max(0, int(full_frame_max_px))
+        self.tile_state: Dict[str, Any] = {}
 
         if model_name == "realesr_x2plus":
             w_path = get_weights_path("realesr_x2plus")
@@ -389,11 +409,13 @@ class SuperResolutionStage:
             raise ValueError(f"Unknown SuperResolution model: {model_name}")
 
         self.model = self.model.to(self.device).eval()
-        if self.fp16:
-            self.model = self.model.half()
+        if self.device.type == "cuda":
+            if self.fp16:
+                self.model = self.model.half()
+            self.model = self.model.to(memory_format=_CL)
         logger.info(
-            "SuperResolution (%s, scale=%dx, tile=%d, max_out=%d) loaded on %s",
-            model_name, self.scale, tile_size, max_out_dim, device
+            "SuperResolution (%s, scale=%dx, tile=%d, max_out=%d, max_untiled_px=%d) loaded on %s",
+            model_name, self.scale, tile_size, max_out_dim, self.full_frame_max_px, device
         )
 
     def process_frame_tensor(
@@ -410,16 +432,20 @@ class SuperResolutionStage:
         t_in = t_rgb.half() if (self.fp16 and t_rgb.dtype != torch.float16) else (
             t_rgb.float() if (not self.fp16 and t_rgb.dtype != torch.float32) else t_rgb
         )
+        untiled = (self.full_frame_max_px > 0 and (h * w <= self.full_frame_max_px) and not self.tile_state.get("tile_size"))
+        eff_tile = max(h, w) if untiled else self.tile_size
+        t_in_exec = t_in.contiguous(memory_format=_CL) if self.device.type == "cuda" else t_in
 
         with torch.inference_mode():
             out_sr = run_tiled_inference(
                 model=self.model,
-                tensor=t_in,
-                tile_size=self.tile_size,
+                tensor=t_in_exec,
+                tile_size=eff_tile,
                 tile_pad=self.tile_pad,
                 scale=self.scale,
                 fp16=self.fp16,
-                batch_size=self.tile_batch_size
+                batch_size=self.tile_batch_size,
+                tile_state=self.tile_state
             )
 
             # Determine final target spatial dimensions cleanly on GPU
@@ -474,29 +500,34 @@ class SuperResolutionStage:
 class TemporalSmoothingStage:
     """
     Motion-compensated temporal consistency using Farneback backward dense optical flow.
-    - Caches float32 warp coordinate grids across identical frame dimensions.
-    - Computes backward flow (curr -> prev) for exact cv2.remap warp alignment.
-    - Adaptive optical flow scale ceiling ensures high-res SR outputs remain responsive.
+    - Runs reduced-scale Farneback optical flow on CPU (capped at 360p height for 4K responsiveness).
+    - Performs flow upsampling, F.grid_sample backward warping, photometric gating,
+      glare suppression, and EMA blending directly on GPU tensors to stay zero-copy in pipeline.
     """
 
     def __init__(
         self,
         ema_alpha: float = 0.18,
         motion_compensated: bool = True,
-        flow_scale: float = 0.5
+        flow_scale: float = 0.5,
+        device: Optional[torch.device] = None
     ):
         self.ema_alpha = ema_alpha
         self.motion_compensated = motion_compensated
         self.flow_scale = flow_scale
+        self.device = device
         self.prev_output_bgr: Optional[np.ndarray] = None
         self.prev_gray: Optional[np.ndarray] = None
+        self._prev_t: Optional[torch.Tensor] = None
         self._grid_shape: Optional[Tuple[int, int]] = None
         self._grid_x: Optional[np.ndarray] = None
         self._grid_y: Optional[np.ndarray] = None
+        self._gpu_grid_cache: Optional[Tuple[Tuple[int, int, str], torch.Tensor, torch.Tensor]] = None
 
     def reset(self):
         self.prev_output_bgr = None
         self.prev_gray = None
+        self._prev_t = None
 
     def _get_grid(self, w: int, h: int) -> Tuple[np.ndarray, np.ndarray]:
         if self._grid_shape != (h, w) or self._grid_x is None or self._grid_y is None:
@@ -506,7 +537,96 @@ class TemporalSmoothingStage:
             self._grid_shape = (h, w)
         return self._grid_x, self._grid_y
 
+    def _get_gpu_grid(self, h: int, w: int, device: torch.device) -> Tuple[torch.Tensor, torch.Tensor]:
+        cache_key = (h, w, str(device))
+        if self._gpu_grid_cache is None or self._gpu_grid_cache[0] != cache_key:
+            gy, gx = torch.meshgrid(
+                torch.arange(h, device=device, dtype=torch.float32),
+                torch.arange(w, device=device, dtype=torch.float32),
+                indexing="ij"
+            )
+            self._gpu_grid_cache = (cache_key, gx, gy)
+        return self._gpu_grid_cache[1], self._gpu_grid_cache[2]
+
+    def process_frame_tensor(self, t_rgb: torch.Tensor, strength: float = 1.0) -> torch.Tensor:
+        """
+        GPU-resident motion-compensated temporal smoothing on (1, 3, H, W) RGB tensor in [0, 1].
+        Eliminates extra full-frame CPU<->GPU transfers by computing Farneback flow on compact gray luma
+        and running full-resolution warping and gating directly on t_rgb.device.
+        """
+        _, _, h, w = t_rgb.shape
+        dev = t_rgb.device
+        out_dtype = t_rgb.dtype
+        cur_f = t_rgb.float()
+
+        with torch.inference_mode():
+            gray_u8 = (
+                (0.299 * cur_f[:, 0] + 0.587 * cur_f[:, 1] + 0.114 * cur_f[:, 2])
+                .clamp(0.0, 1.0) * 255.0
+            ).round().byte().squeeze(0).cpu().numpy()
+
+            if (
+                self._prev_t is None
+                or strength <= 0.05
+                or tuple(self._prev_t.shape[-2:]) != (h, w)
+                or self._prev_t.device != dev
+            ):
+                self._prev_t = (cur_f.clamp(0.0, 1.0) * 255.0).round() / 255.0
+                self.prev_gray = gray_u8
+                return t_rgb
+
+            if self.motion_compensated and self.prev_gray is not None:
+                eff_scale = min(self.flow_scale, 360.0 / max(1, h))
+                sw = max(16, int(w * eff_scale))
+                sh = max(16, int(h * eff_scale))
+
+                prev_small = cv2.resize(self.prev_gray, (sw, sh), interpolation=cv2.INTER_AREA)
+                curr_small = cv2.resize(gray_u8, (sw, sh), interpolation=cv2.INTER_AREA)
+
+                flow_small = cv2.calcOpticalFlowFarneback(
+                    curr_small, prev_small, None,
+                    pyr_scale=0.5, levels=3, winsize=13, iterations=3, poly_n=5, poly_sigma=1.1, flags=0
+                )
+
+                flow_t = torch.from_numpy(np.ascontiguousarray(flow_small)).to(dev, non_blocking=True)
+                flow_t = flow_t.permute(2, 0, 1).unsqueeze(0)
+                flow_up = F.interpolate(flow_t, size=(h, w), mode="bilinear", align_corners=False)
+
+                gx, gy = self._get_gpu_grid(h, w, dev)
+                map_x = gx + flow_up[0, 0] * (float(w) / float(sw))
+                map_y = gy + flow_up[0, 1] * (float(h) / float(sh))
+
+                norm_x = map_x * (2.0 / max(w - 1, 1)) - 1.0
+                norm_y = map_y * (2.0 / max(h - 1, 1)) - 1.0
+                grid = torch.stack((norm_x, norm_y), dim=-1).unsqueeze(0)
+
+                warped = F.grid_sample(self._prev_t, grid, mode="bilinear", padding_mode="reflection", align_corners=True)
+
+                photometric_err = (cur_f - warped).abs().mean(dim=1, keepdim=True) * 255.0
+                valid_mask = ((22.0 - photometric_err) / 22.0).clamp(0.0, 1.0)
+
+                y_u8 = (0.299 * cur_f[:, 0:1] + 0.587 * cur_f[:, 1:2] + 0.114 * cur_f[:, 2:3]) * 255.0
+                glare_weight = 1.0 - 0.88 * ((y_u8 - 180.0) / 50.0).clamp(0.0, 1.0)
+                alpha = (self.ema_alpha * strength) * valid_mask * glare_weight
+                out_f = (cur_f + alpha * (warped - cur_f)).clamp(0.0, 1.0)
+            else:
+                diff_gray = (cur_f - self._prev_t).abs().mean(dim=1, keepdim=True) * 255.0
+                motion_weight = (diff_gray / 28.0).clamp(0.0, 1.0)
+                alpha = (self.ema_alpha * strength) * (1.0 - motion_weight)
+                out_f = (cur_f + alpha * (self._prev_t - cur_f)).clamp(0.0, 1.0)
+
+            self._prev_t = (out_f * 255.0).round() / 255.0
+            self.prev_gray = gray_u8
+            return out_f.half() if out_dtype == torch.float16 else out_f
+
     def process_frame(self, frame_bgr: np.ndarray, strength: float = 1.0) -> np.ndarray:
+        if self.device is not None and self.device.type == "cuda":
+            t_rgb = bgr_to_gpu_rgb_tensor(frame_bgr, self.device, fp16=False)
+            out_t = self.process_frame_tensor(t_rgb, strength=strength)
+            out_bgr = gpu_rgb_tensor_to_bgr(out_t)
+            self.prev_output_bgr = out_bgr
+            return out_bgr
+
         curr_gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
 
         if self.prev_output_bgr is None or strength <= 0.05:

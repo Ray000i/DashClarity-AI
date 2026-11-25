@@ -5,11 +5,42 @@ Academic End-Semester Generative AI Platform.
 """
 
 import os
+import sys
 import re
 import json
 import time
 import logging
 from pathlib import Path
+
+
+def _relaunch_in_project_venv() -> None:
+    """Relaunches via project .venv CUDA interpreter if invoked from CPU-only system Python."""
+    if os.environ.get("DASHCLARITY_NO_VENV_RELAUNCH"):
+        return
+    venv_py = Path(__file__).resolve().parent / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    if not venv_py.exists() or Path(sys.prefix).resolve() == venv_py.parent.parent.resolve():
+        return
+    try:
+        import torch as _torch
+        if _torch.cuda.is_available():
+            return
+    except Exception:
+        pass
+    import subprocess
+    probe = subprocess.run([str(venv_py), "-c", "import torch; print(torch.cuda.is_available())"], capture_output=True, text=True)
+    if probe.stdout.strip() != "True":
+        return
+    env = dict(os.environ, DASHCLARITY_NO_VENV_RELAUNCH="1")
+    try:
+        code = subprocess.call([str(venv_py), str(Path(__file__).resolve()), *sys.argv[1:]], env=env)
+    except KeyboardInterrupt:
+        code = 0
+    sys.exit(code)
+
+
+if __name__ == "__main__":
+    _relaunch_in_project_venv()
+
 from flask import (
     Flask, render_template, request, jsonify,
     send_file, redirect, url_for, abort, Response
@@ -116,6 +147,7 @@ def api_system_status():
         "cuda_available": hw["cuda_available"],
         "pytorch_version": hw["pytorch_version"],
         "cuda_version": hw["cuda_version"],
+        "driver_version": hw.get("driver_version"),
         "device_name": hw["gpu_name"] if hw["cuda_available"] else "CPU",
         "device_count": hw["device_count"],
         "total_vram_mb": hw["total_vram_mb"],
@@ -125,6 +157,7 @@ def api_system_status():
         "system_ram_total_gb": hw["system_ram_total_gb"],
         "system_ram_available_gb": hw["system_ram_available_gb"],
         "adaptive_profile": hw["profile"],
+        "vram": vram,
         "model_architecture": "Modular: SCUNet + Zero-DCE++ + Real-ESRGAN + Farneback",
         "weights_status": "Loaded"
     }
@@ -319,7 +352,7 @@ def api_upload():
                 saved_path.unlink()
             except OSError:
                 pass
-        return jsonify({"error": f"Corrupt or invalid video container: {str(ve)}. Please upload a valid playable video."}), 400
+        return jsonify({"error": "Corrupt or invalid video container: the file could not be decoded as a playable video."}), 400
     except Exception as e:
         logger.exception(f"Upload failed: {e}")
         if saved_path.exists():
@@ -327,7 +360,7 @@ def api_upload():
                 saved_path.unlink()
             except OSError:
                 pass
-        return jsonify({"error": f"Failed to process uploaded video: {str(e)}"}), 500
+        return jsonify({"error": "Failed to process uploaded video. Please check server logs for details."}), 500
 
 
 @app.route("/api/video/<job_id>", methods=["GET"])

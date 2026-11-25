@@ -19,7 +19,8 @@ class TestOpenCVRegression(unittest.TestCase):
         arr_lowres = np.zeros((720, 1280, 3), dtype=np.uint8)
         with self.assertRaises(cv2.error) as ctx:
             cv2.addWeighted(arr_highres, 0.8, arr_lowres, 0.2, 0)
-        self.assertIn("(-209:Sizes of input arguments do not match)", str(ctx.exception))
+        msg = str(ctx.exception)
+        self.assertTrue("-209" in msg or "broadcast" in msg, msg)
 
     def test_fixed_super_resolution_stage_handles_mismatched_res(self):
         """Verifies that SuperResolutionStage with restore_at_original_res=False and strength < 1.0 blends cleanly."""

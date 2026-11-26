@@ -48,7 +48,7 @@ def parse_args():
     )
     parser.add_argument(
         "--preset", "-p", type=str, default="fast",
-        choices=["fast", "balanced", "quality", "full", "stcd_comparison", "hybrid_scunet_stcd", "classical_baseline"],
+        choices=["fast", "balanced", "quality", "full"],
         help="Enhancement pipeline preset"
     )
     parser.add_argument(

@@ -132,11 +132,14 @@ class TestFrontendUI(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         data = resp.get_json()
         self.assertIn("presets", data)
-        self.assertTrue(len(data["presets"]) >= 3)
+        self.assertEqual(len(data["presets"]), 3)
         keys = [p["key"] for p in data["presets"]]
         self.assertIn("fast", keys)
         self.assertIn("balanced", keys)
         self.assertIn("quality", keys)
+        self.assertNotIn("stcd_comparison", keys)
+        self.assertNotIn("hybrid_scunet_stcd", keys)
+        self.assertNotIn("classical_baseline", keys)
         for p in data["presets"]:
             self.assertIn("tradeoff", p)
             self.assertIn("label", p)

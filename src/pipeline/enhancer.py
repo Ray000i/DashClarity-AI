@@ -1,7 +1,7 @@
 """
 DashClarity AI - Adaptive Modular Video Enhancement Pipeline
 Orchestrates sequential execution of modular restoration stages:
-Denoising (SCUNet / Classical) -> Low-Light (Zero-DCE++ / STCD) -> Super-Resolution -> Temporal Smoothing.
+Denoising (SCUNet / Bilateral) -> Low-Light (Zero-DCE++) -> Super-Resolution -> Temporal Smoothing.
 
 Optimizations & Compatibility:
 - Automatically detects GPU VRAM (e.g. RTX 4050 6GB vs RTX 4060 8GB) via src.utils.hardware
@@ -99,7 +99,6 @@ class VideoEnhancementPipeline:
             strength=self.cfg.get("models", {}).get("denoise_strength", 0.85)
         )
         self.low_light_stage: Optional[LowLightStage] = None
-        self.stcd_stage: Optional[LowLightStage] = None
         self.super_res_stage: Optional[SuperResolutionStage] = None
         self.temporal_stage = TemporalSmoothingStage(
             ema_alpha=self.cfg.get("models", {}).get("temporal_ema_alpha", 0.18),
@@ -147,13 +146,9 @@ class VideoEnhancementPipeline:
     def _prune_unused_stages(self, preset_cfg: Dict[str, Any]):
         """Unloads heavy unused models on constrained GPUs (e.g., 6 GB RTX 4050) to reclaim VRAM."""
         need_neural_denoise = preset_cfg.get("enable_neural_denoise", False) or preset_cfg.get("enable_denoise", False)
-        need_stcd = preset_cfg.get("enable_low_light", False) and preset_cfg.get("low_light_model") == "stcd_lowlight"
         need_sr = preset_cfg.get("enable_super_res", False)
 
         freed = False
-        if not need_stcd and self.stcd_stage is not None:
-            self.stcd_stage = None
-            freed = True
         if self.sequential_offload:
             if not need_neural_denoise and self.neural_denoise_stage is not None:
                 self.neural_denoise_stage = None
@@ -194,15 +189,10 @@ class VideoEnhancementPipeline:
                 self.cfg.get("models", {}).get("flow_scale", 0.5)
             )
 
-        # 2. Low-light model setup
+        # 2. Low-light model setup (Zero-DCE++)
         if preset_cfg.get("enable_low_light", False):
-            model_key = preset_cfg.get("low_light_model", self.cfg.get("models", {}).get("low_light", "zero_dce_plus"))
-            if model_key == "stcd_lowlight":
-                if self.stcd_stage is None:
-                    self.stcd_stage = LowLightStage(self.device, model_type="stcd_lowlight", fp16=self.fp16)
-            else:
-                if self.low_light_stage is None:
-                    self.low_light_stage = LowLightStage(self.device, model_type="zero_dce_plus", fp16=self.fp16)
+            if self.low_light_stage is None:
+                self.low_light_stage = LowLightStage(self.device, model_type="zero_dce_plus", fp16=self.fp16)
 
         # 3. Super-Resolution model setup
         if preset_cfg.get("enable_super_res", False):
@@ -316,7 +306,6 @@ class VideoEnhancementPipeline:
         )
         use_classical_denoise = preset_cfg.get("enable_classical_denoise", False) and not use_neural_denoise
         use_low_light = preset_cfg.get("enable_low_light", False)
-        is_stcd = use_low_light and (preset_cfg.get("low_light_model") == "stcd_lowlight")
         use_sr = preset_cfg.get("enable_super_res", False) and self.super_res_stage is not None
 
         # 1. Denoising Stage FIRST (SCUNet on GPU or Bilateral on CPU)
@@ -328,19 +317,12 @@ class VideoEnhancementPipeline:
             current_np = self.classical_denoise_stage.process_frame(current_np, strength=eff_strength)
             stage_telemetry["classical_denoise"] = "bilateral"
 
-        # 2. Low-Light Illumination Stage (chains directly on GPU tensor when using Zero-DCE++)
-        if use_low_light:
-            if is_stcd and self.stcd_stage is not None:
-                if gpu_tensor is not None:
-                    current_np = gpu_rgb_tensor_to_bgr(gpu_tensor)
-                    gpu_tensor = None
-                current_np, ll_info = self.stcd_stage.process_frame(current_np, frame_neighbor=frame_neighbor, strength=eff_strength)
-                stage_telemetry["low_light"] = ll_info
-            elif self.low_light_stage is not None:
-                if gpu_tensor is None:
-                    gpu_tensor = bgr_to_gpu_rgb_tensor(current_np, self.device, self.fp16)
-                gpu_tensor, ll_info = self.low_light_stage.process_frame_tensor(gpu_tensor, strength=eff_strength)
-                stage_telemetry["low_light"] = ll_info
+        # 2. Low-Light Illumination Stage (chains directly on GPU tensor using Zero-DCE++)
+        if use_low_light and self.low_light_stage is not None:
+            if gpu_tensor is None:
+                gpu_tensor = bgr_to_gpu_rgb_tensor(current_np, self.device, self.fp16)
+            gpu_tensor, ll_info = self.low_light_stage.process_frame_tensor(gpu_tensor, strength=eff_strength)
+            stage_telemetry["low_light"] = ll_info
 
         # 3. Super-Resolution Stage (chains directly on GPU tensor with bounded output resolution)
         if use_sr:

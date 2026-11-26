@@ -101,32 +101,15 @@ function loadPresets() {
             presets.forEach(p => { loadedPresetsMap[p.key] = p; });
 
             const recommendedKeys = ["fast", "balanced", "quality"];
-            const recommended = presets.filter(p => recommendedKeys.includes(p.key));
-            const ablation = presets.filter(p => !recommendedKeys.includes(p.key));
+            const activePresets = presets.filter(p => recommendedKeys.includes(p.key));
 
             let html = "";
             let selectedPresetKey = null;
-            // Render Recommended presets
-            recommended.forEach((p, index) => {
-                const isSelected = p.key === "balanced" || (index === 0 && !presets.some(x => x.key === "balanced"));
+            activePresets.forEach((p, index) => {
+                const isSelected = p.key === "balanced" || (index === 0 && !activePresets.some(x => x.key === "balanced"));
                 if (isSelected) selectedPresetKey = p.key;
                 html += renderPresetCard(p, isSelected);
             });
-
-            // Render Research / ablation presets in collapsed details
-            if (ablation.length > 0) {
-                html += `
-                    <details class="presets-details">
-                        <summary class="presets-summary">
-                            <span>Research / ablation presets (STCD, Hybrid, Classical)</span>
-                            <span style="font-size: 0.72rem; color: var(--accent-amber);">&#9660;</span>
-                        </summary>
-                        <div class="presets-content">
-                            ${ablation.map(p => renderPresetCard(p, false)).join("")}
-                        </div>
-                    </details>
-                `;
-            }
 
             container.innerHTML = html;
             if (selectedPresetKey) syncStageCheckboxes(selectedPresetKey);

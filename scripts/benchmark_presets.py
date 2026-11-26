@@ -29,10 +29,7 @@ def benchmark_resolution(resolution_name: str, width: int, height: int):
     presets = [
         "fast",
         "balanced",
-        "quality",
-        "stcd_comparison",
-        "hybrid_scunet_stcd",
-        "classical_baseline"
+        "quality"
     ]
     results = {}
 
@@ -48,7 +45,7 @@ def benchmark_resolution(resolution_name: str, width: int, height: int):
         torch.cuda.reset_peak_memory_stats()
 
         # Adjust frame count based on preset throughput to maintain quick evaluation
-        if preset_name in ("fast", "classical_baseline"):
+        if preset_name == "fast":
             num_frames = 15
         elif preset_name == "balanced":
             num_frames = 10

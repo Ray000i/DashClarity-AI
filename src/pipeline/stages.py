@@ -19,7 +19,6 @@ import torch.nn.functional as F
 from src.models.zerodce import ZeroDCEPlus
 from src.models.srvgg import SRVGGNetCompact
 from src.models.rrdb import RRDBNet
-from src.models.stcd import STCDWrapper
 from src.models.scunet_fast import accelerate_scunet
 from src.models.weights_manager import get_weights_path
 from src.pipeline.tiling import run_tiled_inference
@@ -72,10 +71,6 @@ class LowLightStage:
             if self.fp16:
                 self.model = self.model.half()
             logger.info("Zero-DCE++ loaded successfully on %s (fp16=%s)", device, self.fp16)
-        elif model_type == "stcd_lowlight":
-            w_path = get_weights_path("stcd_indoor")
-            self.model = STCDWrapper(str(w_path), self.device)
-            logger.info("STCD low-light wrapper loaded successfully on %s", device)
         else:
             raise ValueError(f"Unknown low-light model type: {model_type}")
 
@@ -217,23 +212,6 @@ class LowLightStage:
         frame_neighbor: Optional[np.ndarray] = None,
         strength: float = 1.0
     ) -> Tuple[np.ndarray, Dict[str, Any]]:
-        if self.model_type == "stcd_lowlight":
-            gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
-            mean_lum = float(np.mean(gray))
-            adaptive_strength = max(0.05, min(1.0, 1.0 - max(0.0, mean_lum - 42.0) / 88.0)) * strength
-            condition = "nighttime_lowlight" if mean_lum < 45.0 else "twilight_mixed"
-            if adaptive_strength <= 0.01:
-                return frame_bgr.copy(), {"condition": condition, "lum": mean_lum, "applied": False}
-
-            neigh = frame_neighbor if frame_neighbor is not None else frame_bgr
-            raw_enh = self.model.enhance(frame_bgr, neigh)
-            if raw_enh.shape[:2] != frame_bgr.shape[:2]:
-                raw_enh = cv2.resize(raw_enh, (frame_bgr.shape[1], frame_bgr.shape[0]), interpolation=cv2.INTER_LINEAR)
-            if raw_enh.dtype != frame_bgr.dtype:
-                raw_enh = raw_enh.astype(frame_bgr.dtype)
-            blended = cv2.addWeighted(raw_enh, adaptive_strength, frame_bgr, 1.0 - adaptive_strength, 0)
-            return blended, {"condition": condition, "lum": mean_lum, "applied": True}
-
         t_rgb = bgr_to_gpu_rgb_tensor(frame_bgr, self.device, self.fp16)
         out_t, info = self.process_frame_tensor(t_rgb, strength=strength)
         if not info.get("applied", True):

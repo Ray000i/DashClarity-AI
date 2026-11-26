@@ -9,7 +9,7 @@ hardware:
   max_vram_gb: 6.0        # VRAM ceiling to maintain headroom on 8 GB GPU
 
 models:
-  low_light: "zero_dce_plus"         # zero_dce_plus, zero_dce, or stcd_lowlight
+  low_light: "zero_dce_plus"         # zero_dce_plus
   denoiser: "scunet"                 # scunet (neural) or bilateral (classical)
   super_res: "realesr_general_x4v3"  # realesr_general_x4v3 or realesr_x2plus
   denoise_strength: 0.85
@@ -67,31 +67,4 @@ presets:
     enable_low_light: true
     enable_super_res: true
     enable_temporal: true
-    strength: 1.0
-
-  stcd_comparison:
-    description: "Ablation preset running IJCAI 2025 STCD spatial-temporal model with real neural output"
-    enable_neural_denoise: false
-    enable_low_light: true
-    low_light_model: "stcd_lowlight"
-    enable_super_res: false
-    enable_temporal: false
-    strength: 1.0
-
-  hybrid_scunet_stcd:
-    description: "Hybrid research preset: SCUNet neural denoiser -> STCD spatial-temporal decomposition"
-    enable_neural_denoise: true
-    neural_denoise_fast_mode: false
-    enable_low_light: true
-    low_light_model: "stcd_lowlight"
-    enable_super_res: false
-    enable_temporal: false
-    strength: 1.0
-
-  classical_baseline:
-    description: "Classical baseline for ablation: Bilateral filter + Zero-DCE++ (no neural denoiser / SR)"
-    enable_classical_denoise: true
-    enable_low_light: true
-    enable_super_res: false
-    enable_temporal: false
     strength: 1.0

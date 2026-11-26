@@ -244,20 +244,14 @@ def api_presets():
             pass
 
     tradeoffs = {
-        "fast": "Light bilateral denoise only; high-ISO CMOS noise is preserved.",
-        "balanced": "Fast neural denoiser and motion compensation; 6x longer processing latency.",
-        "quality": "Full neural SCUNet + Real-ESRGAN super-resolution; slow execution (0.6 FPS).",
-        "stcd_comparison": "Experimental indoor-trained model; slower inference and potential color domain shift.",
-        "hybrid_scunet_stcd": "Research ablation combining neural denoiser and spatial-temporal transformer.",
-        "classical_baseline": "Non-deep learning classical bilateral baseline for academic comparison."
+        "fast": "Light bilateral denoise only; prioritizes high-FPS real-time preview.",
+        "balanced": "Fast neural denoiser, Retinex low-light boost, and optical-flow motion compensation.",
+        "quality": "Full-resolution neural SCUNet + Zero-DCE++ + Real-ESRGAN super-resolution + temporal smoothing."
     }
     labels = {
         "fast": "Fast (real-time demo)",
         "balanced": "Balanced (recommended)",
-        "quality": "Quality (full pipeline)",
-        "stcd_comparison": "STCD comparison (ablation)",
-        "hybrid_scunet_stcd": "Hybrid (SCUNet -> STCD)",
-        "classical_baseline": "Classical baseline"
+        "quality": "Quality (full pipeline)"
     }
 
     preset_list = []
@@ -402,6 +396,8 @@ def api_start_enhance(job_id):
 
     data = request.get_json(silent=True) or {}
     preset = str(data.get("preset", "balanced")).lower()
+    if preset not in ("fast", "balanced", "quality", "full"):
+        preset = "balanced"
     try:
         strength = max(0.05, min(1.0, float(data.get("strength", 1.0))))
     except (ValueError, TypeError):

@@ -102,10 +102,9 @@ DashClarity AI is calibrated to operate within an **8 GB VRAM envelope** on mobi
 
 | Preset | Active Stages | Target Resolution | Inference FPS | GPU VRAM | Primary Use Case |
 | :--- | :--- | :---: | :---: | :---: | :--- |
-| **Fast** | Zero-DCE++ + Fast Classical Denoise | 720p / 1080p | **31.5 FPS** | **~1.2 GB** | Real-time live demonstration, rapid triage |
-| **Balanced** | SCUNet (Luma Downsampled) + Zero-DCE++ | 720p | **3.5 FPS** | **~2.2 GB** | High-fidelity incident claim review |
-| **Quality** | SCUNet + Zero-DCE++ + Real-ESRGAN + Flow | 720p / 1080p | **0.6 FPS** | **~4.8 GB** | Forensic frame magnification & plate extraction |
-| **STCD Baseline** | Dual-Decoder Autoencoder + Attention | 360p / 720p | **0.5 FPS** | **~3.9 GB** | Research benchmark baseline |
+| **Fast** | Zero-DCE++ + Light Classical Denoise | 720p / 1080p | **25.06 FPS** (720p) | **0.57 GB** (720p) | Real-time live demonstration, rapid triage |
+| **Balanced** | SCUNet (Fast Mode) + Zero-DCE++ + Flow | 720p / 1080p | **3.65 FPS** (720p) | **0.66 GB** (720p) | High-fidelity incident claim review |
+| **Quality** | SCUNet + Zero-DCE++ + Real-ESRGAN + Flow | 720p / 1080p | **1.24 FPS** (720p) | **1.45 GB** (720p) | Forensic frame magnification & plate extraction |
 
 ---
 
